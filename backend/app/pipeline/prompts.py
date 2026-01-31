@@ -1,6 +1,28 @@
 """LLM 프롬프트 템플릿"""
 
-ROOT_SYSTEM_PROMPT = """당신은 피싱 예방 교육을 위한 텍스트 어드벤처 게임 시나리오 작가입니다.
+# 이미지 프롬프트 가이드라인
+IMAGE_PROMPT_GUIDE = """
+image_prompt 작성 규칙 (매우 중요):
+- 반드시 영문으로 작성
+- 구체적인 장면, 인물, 감정, 환경을 묘사
+- 다양한 시각적 요소를 포함:
+  * 장소: 거실, 사무실, 지하철, 카페, 은행, 경찰서, 병원 대기실 등
+  * 시간대: 밤, 새벽, 점심시간, 퇴근길 등
+  * 날씨/분위기: 비 오는 날, 어두운 골목, 밝은 오피스 등
+  * 인물 특징: 나이대, 복장, 표정, 자세 등
+  * 기기/소품: 스마트폰, 노트북, ATM, 서류, 현금 등
+- 감정과 분위기를 구체적으로:
+  * 긴장: worried expression, sweating, biting nails
+  * 혼란: confused look, furrowed brow
+  * 공포: wide eyes, pale face, trembling hands
+  * 안도: relieved expression, deep breath, relaxed shoulders
+  * 후회: head in hands, tears, looking down
+- 한국적 요소 포함: Korean text on signs, Korean apartment, Korean cafe
+- 스타일: "webtoon style illustration" 또는 "Korean manhwa style"
+- 매 장면마다 다른 구도와 시점 사용
+"""
+
+ROOT_SYSTEM_PROMPT = f"""당신은 피싱 예방 교육을 위한 텍스트 어드벤처 게임 시나리오 작가입니다.
 2인칭 시점("당신은...")으로 현실적인 피싱 시나리오를 작성합니다.
 반드시 JSON 형식으로만 응답하세요.
 
@@ -13,9 +35,10 @@ ROOT_SYSTEM_PROMPT = """당신은 피싱 예방 교육을 위한 텍스트 어�
 선택지 작성 규칙:
 - 각 노드에 2-3개의 선택지 제공
 - 최소 1개는 위험한 선택(is_dangerous=true), 1개는 안전한 선택
-- 선택지 텍스트는 1-2문장으로 간결하게"""
+- 선택지 텍스트는 1-2문장으로 간결하게
+{IMAGE_PROMPT_GUIDE}"""
 
-NODE_SYSTEM_PROMPT = """당신은 피싱 시나리오의 다음 장면을 생성합니다.
+NODE_SYSTEM_PROMPT = f"""당신은 피싱 시나리오의 다음 장면을 생성합니다.
 이전 이야기 맥락과 플레이어의 선택을 바탕으로 자연스러운 다음 장면을 작성합니다.
 반드시 JSON 형식으로만 응답하세요.
 
@@ -27,7 +50,8 @@ NODE_SYSTEM_PROMPT = """당신은 피싱 시나리오의 다음 장면을 생성
 엔딩 작성 규칙:
 - ending_good: 피싱을 간파하고 피해를 예방한 결말
 - ending_bad: 피싱에 당해 금전적/개인정보 피해를 입은 결말
-- 엔딩 텍스트는 상황의 결과와 교훈을 포함"""
+- 엔딩 텍스트는 상황의 결과와 교훈을 포함
+{IMAGE_PROMPT_GUIDE}"""
 
 EDUCATIONAL_SYSTEM_PROMPT = """당신은 피싱 예방 교육 전문가입니다.
 주어진 피싱 시나리오 상황에 대해 교육적 콘텐츠를 작성합니다.
@@ -71,11 +95,16 @@ def build_root_prompt(phishing_type: str, difficulty: str, seed_info: str | None
       "resource_effect": {"trust": 0, "money": 0, "awareness": 0}
     }
   ],
-  "image_prompt": "A person receiving a suspicious phone call in a modern Korean apartment, tense atmosphere, webtoon style illustration, dark lighting",
+  "image_prompt": "상세한 영문 이미지 프롬프트",
   "reasoning": "이 장면 설계의 근거"
 }
 
-IMPORTANT: image_prompt는 필수입니다. 반드시 영문으로 장면을 묘사하는 이미지 프롬프트를 포함하세요."""
+image_prompt 예시 (매번 다르게 작성):
+- "A worried middle-aged Korean woman in her 50s sitting on a living room sofa at night, holding a smartphone showing a text message, warm lamp light casting shadows, biting her lip nervously, Korean apartment with family photos on the wall, webtoon style illustration"
+- "Close-up of a young Korean office worker in a subway car during rush hour, staring at phone screen with confused expression, other passengers blurred in background, fluorescent lighting, Korean manhwa style"
+- "A Korean man in his 40s at an ATM machine inside a convenience store at 2am, sweating with trembling hands, security camera visible, harsh artificial lighting, tense atmosphere, webtoon style"
+
+IMPORTANT: image_prompt는 반드시 위 예시처럼 구체적이고 다양하게 작성하세요."""
     return prompt
 
 
@@ -132,11 +161,16 @@ choices는 빈 리스트 []로 작성하세요.
   "node_type": "narrative" | "ending_good" | "ending_bad",
   "narrative_text": "2인칭 시점 나레이션 (한국어)",
   "choices": [{"text": "...", "is_dangerous": true/false, "resource_effect": {"trust": 0, "money": 0, "awareness": 0}}],
-  "image_prompt": "English image prompt describing the scene, webtoon style, Korean urban setting",
+  "image_prompt": "상세한 영문 이미지 프롬프트",
   "reasoning": "이 장면 설계의 근거"
 }
 
-IMPORTANT: image_prompt는 필수입니다. 특히 엔딩 노드(ending_good/ending_bad)는 반드시 이미지 프롬프트를 포함하세요."""
+image_prompt 예시 (이전 장면과 다르게 작성):
+- narrative: "A stressed Korean businessman in his 30s hunched over a laptop in a dimly lit home office at midnight, multiple browser tabs open, empty coffee cups on desk, worried expression, blue screen light illuminating face, webtoon style"
+- ending_good: "A relieved young Korean woman sitting at a police station, officer in uniform taking notes, bright fluorescent lights, certificates on wall, she's showing her phone screen as evidence, hopeful expression, Korean text visible on documents, manhwa style illustration"
+- ending_bad: "A devastated elderly Korean man in his 60s sitting alone on a park bench at dusk, head in hands, crumpled bank statement on the ground, autumn leaves falling, empty wallet visible, tears on cheeks, melancholic atmosphere, webtoon style"
+
+IMPORTANT: image_prompt는 필수. 이전 노드와 중복되지 않는 새로운 장면을 묘사하세요."""
     return prompt
 
 
