@@ -1,0 +1,29 @@
+# Environment
+.env
+venv/
+
+# Claude Code
+.claude/
+
+# Documentation (generated)
+docs/
+
+# Credentials (보안상 반드시 제외)
+credentials/
+*.json
+!package.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Data (생성된 데이터)
+app/data/scenarios/
+app/data/images/
+
+# IDE
+.vscode/
+.idea/
