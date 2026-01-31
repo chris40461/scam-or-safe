@@ -79,6 +79,7 @@ async def generate_root_node(
         except Exception as e:
             if attempt == settings.retry_count:
                 # 폴백: 기본 루트 노드
+                print(f"[Root Generator] All retries failed, using fallback: {str(e)[:100]}")
                 return GenerationResult(
                     node_type="narrative",
                     narrative_text=f"당신의 휴대폰에 알 수 없는 번호로 연락이 왔습니다. {phishing_type} 관련 의심스러운 내용입니다.",
@@ -89,7 +90,10 @@ async def generate_root_node(
                     image_prompt="A person in a modern Korean apartment receiving a suspicious phone call, tense atmosphere, dark lighting, webtoon style illustration",
                     reasoning=f"LLM 호출 실패로 폴백 노드 생성: {str(e)}"
                 )
-            await asyncio.sleep(1)
+            # 지수 백오프: 1s, 2s, 4s
+            delay = 1 * (2 ** attempt)
+            print(f"[Root Generator] Attempt {attempt + 1} failed, retrying in {delay}s...")
+            await asyncio.sleep(delay)
 
 
 async def generate_node(context: GenerationContext) -> GenerationResult:
@@ -126,21 +130,46 @@ async def generate_node(context: GenerationContext) -> GenerationResult:
 
         except Exception as e:
             if attempt == settings.retry_count:
-                # 폴백: 엔딩 노드
-                ending_type = context.ending_type_hint or infer_ending(context.current_resources)
-                image_prompt = (
-                    "A relieved person realizing they avoided a scam, bright lighting, hopeful atmosphere, Korean urban setting, webtoon style"
-                    if ending_type == "good"
-                    else "A distressed person realizing they fell victim to a scam, dark atmosphere, regret and despair, Korean urban setting, webtoon style"
-                )
+                # 폴백: 강제 종료가 필요하거나 최대 깊이에 도달한 경우에만 엔딩 노드 생성
+                if context.force_end or context.current_depth >= context.max_depth - 1:
+                    ending_type = context.ending_type_hint or infer_ending(context.current_resources)
+                    image_prompt = (
+                        "A relieved person realizing they avoided a scam, bright lighting, hopeful atmosphere, Korean urban setting, webtoon style"
+                        if ending_type == "good"
+                        else "A distressed person realizing they fell victim to a scam, dark atmosphere, regret and despair, Korean urban setting, webtoon style"
+                    )
+                    return GenerationResult(
+                        node_type=f"ending_{ending_type}",
+                        narrative_text="상황이 마무리되었습니다." if ending_type == "good" else "안타깝게도 피해가 발생했습니다.",
+                        choices=[],
+                        image_prompt=image_prompt,
+                        reasoning=f"LLM 호출 실패, 강제 엔딩 생성 (depth={context.current_depth}): {str(e)}"
+                    )
+
+                # 폴백: 내러티브 노드 (계속 진행 가능)
+                print(f"[Fallback] Creating narrative node at depth {context.current_depth} due to LLM failure: {str(e)[:100]}")
                 return GenerationResult(
-                    node_type=f"ending_{ending_type}",
-                    narrative_text="상황이 마무리되었습니다." if ending_type == "good" else "안타깝게도 피해가 발생했습니다.",
-                    choices=[],
-                    image_prompt=image_prompt,
-                    reasoning=f"LLM 호출 실패로 폴백 엔딩 생성: {str(e)}"
+                    node_type="narrative",
+                    narrative_text="상황이 계속되고 있습니다. 어떻게 대응하시겠습니까?",
+                    choices=[
+                        ChoiceResult(
+                            text="신중하게 대응한다",
+                            is_dangerous=False,
+                            resource_effect={"trust": 0, "money": 0, "awareness": 1}
+                        ),
+                        ChoiceResult(
+                            text="상대방의 요청을 따른다",
+                            is_dangerous=True,
+                            resource_effect={"trust": 1, "money": -1, "awareness": 0}
+                        ),
+                    ],
+                    image_prompt="A person contemplating a decision, modern Korean setting, tense atmosphere, webtoon style illustration",
+                    reasoning=f"LLM 호출 실패로 폴백 내러티브 노드 생성 (트리 확장 계속): {str(e)}"
                 )
-            await asyncio.sleep(1)
+            # 지수 백오프: 1s, 2s, 4s
+            delay = 1 * (2 ** attempt)
+            print(f"[Node Generator] Attempt {attempt + 1} failed, retrying in {delay}s...")
+            await asyncio.sleep(delay)
 
 
 def result_to_node(

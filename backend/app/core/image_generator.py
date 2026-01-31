@@ -1,6 +1,7 @@
 """이미지 생성 모듈 (Google Imagen via Vertex AI)"""
 import asyncio
 import os
+import time
 from pathlib import Path
 from uuid import uuid4
 from functools import partial
@@ -13,8 +14,8 @@ from app.config import settings
 IMAGES_DIR = Path(__file__).parent.parent / "data" / "images"
 
 
-def _generate_image_sync(prompt: str, node_id: str) -> str | None:
-    """동기 이미지 생성 (스레드에서 실행)"""
+def _generate_image_sync(prompt: str, node_id: str, retry_count: int = 0) -> str | None:
+    """동기 이미지 생성 (스레드에서 실행, 지수 백오프 재시도)"""
     if not settings.gcp_project_id:
         print("Image generation skipped: GCP_PROJECT_ID not configured")
         return None
@@ -30,42 +31,60 @@ def _generate_image_sync(prompt: str, node_id: str) -> str | None:
 
     IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 
-    try:
-        # Vertex AI 모드로 클라이언트 생성
-        client = genai.Client(
-            vertexai=True,
-            project=settings.gcp_project_id,
-            location=settings.gcp_location,
-        )
+    max_retries = settings.image_retry_count
+    base_delay = settings.image_retry_delay
 
-        response = client.models.generate_images(
-            model=settings.image_model,
-            prompt=prompt,
-            config=types.GenerateImagesConfig(
-                number_of_images=1,
-                aspect_ratio="16:9",
-                person_generation="ALLOW_ADULT",
-            ),
-        )
+    for attempt in range(max_retries + 1):
+        try:
+            # Vertex AI 모드로 클라이언트 생성
+            client = genai.Client(
+                vertexai=True,
+                project=settings.gcp_project_id,
+                location=settings.gcp_location,
+            )
 
-        if not response.generated_images:
-            print("Image generation returned no images")
-            return None
+            response = client.models.generate_images(
+                model=settings.image_model,
+                prompt=prompt,
+                config=types.GenerateImagesConfig(
+                    number_of_images=1,
+                    aspect_ratio="16:9",
+                    person_generation="ALLOW_ADULT",
+                ),
+            )
 
-        # 이미지 저장
-        image = response.generated_images[0].image
-        filename = f"{node_id}_{uuid4().hex[:8]}.png"
-        filepath = IMAGES_DIR / filename
+            if not response.generated_images:
+                print(f"[{node_id}] Image generation returned no images")
+                return None
 
-        # PIL Image를 파일로 저장
-        image.save(str(filepath))
-        print(f"Image saved: {filepath}")
+            # 이미지 저장
+            image = response.generated_images[0].image
+            filename = f"{node_id}_{uuid4().hex[:8]}.png"
+            filepath = IMAGES_DIR / filename
 
-        return f"/api/v1/images/{filename}"
+            # PIL Image를 파일로 저장
+            image.save(str(filepath))
+            print(f"[{node_id}] Image saved: {filepath}")
 
-    except Exception as e:
-        print(f"Image generation failed: {e}")
-        return None
+            return f"/api/v1/images/{filename}"
+
+        except Exception as e:
+            error_str = str(e)
+            is_quota_error = "RESOURCE_EXHAUSTED" in error_str or "429" in error_str
+
+            if attempt < max_retries:
+                # 지수 백오프: 2s, 4s, 8s
+                delay = base_delay * (2 ** attempt)
+                if is_quota_error:
+                    # 할당량 초과 시 추가 대기
+                    delay = delay * 2
+                print(f"[{node_id}] Attempt {attempt + 1} failed: {e}. Retrying in {delay:.1f}s...")
+                time.sleep(delay)
+            else:
+                print(f"[{node_id}] Image generation failed after {max_retries + 1} attempts: {e}")
+                return None
+
+    return None
 
 
 async def generate_image(prompt: str, node_id: str) -> str | None:
@@ -77,24 +96,58 @@ async def generate_image(prompt: str, node_id: str) -> str | None:
 
 
 async def generate_images_for_nodes(
-    nodes: dict, max_concurrent: int = 3
+    nodes: dict, max_concurrent: int | None = None
 ) -> dict[str, str]:
-    """여러 노드의 이미지를 병렬 생성"""
+    """
+    여러 노드의 이미지를 순차적으로 생성 (할당량 초과 방지)
+
+    - 설정된 max_concurrent 사용 (기본 1 = 순차 처리)
+    - 각 요청 사이에 딜레이 추가
+    - 개별 이미지 생성에서 지수 백오프 재시도 적용
+    """
+    if max_concurrent is None:
+        max_concurrent = settings.image_max_concurrent
+
     semaphore = asyncio.Semaphore(max_concurrent)
     results: dict[str, str] = {}
+    delay_between_requests = settings.image_retry_delay
 
-    async def gen_with_limit(node_id: str, prompt: str):
+    # 생성할 노드 목록
+    nodes_to_generate = [
+        (node_id, node["image_prompt"])
+        for node_id, node in nodes.items()
+        if node.get("image_prompt") and not node.get("image_url")
+    ]
+
+    total = len(nodes_to_generate)
+    print(f"Starting image generation for {total} nodes (max_concurrent={max_concurrent})")
+
+    async def gen_with_limit(index: int, node_id: str, prompt: str):
         async with semaphore:
+            # 첫 번째 요청이 아니면 딜레이 추가
+            if index > 0:
+                await asyncio.sleep(delay_between_requests)
+
+            print(f"[{index + 1}/{total}] Generating image for {node_id}...")
             url = await generate_image(prompt, node_id)
             if url:
                 results[node_id] = url
+                print(f"[{index + 1}/{total}] Success: {node_id}")
+            else:
+                print(f"[{index + 1}/{total}] Failed: {node_id}")
 
-    tasks = []
-    for node_id, node in nodes.items():
-        if node.get("image_prompt") and not node.get("image_url"):
-            tasks.append(gen_with_limit(node_id, node["image_prompt"]))
+    # 순차 처리 (max_concurrent=1) 시 효율적으로 처리
+    if max_concurrent == 1:
+        for i, (node_id, prompt) in enumerate(nodes_to_generate):
+            await gen_with_limit(i, node_id, prompt)
+    else:
+        # 병렬 처리 시 세마포어로 제한
+        tasks = [
+            gen_with_limit(i, node_id, prompt)
+            for i, (node_id, prompt) in enumerate(nodes_to_generate)
+        ]
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
-    if tasks:
-        await asyncio.gather(*tasks, return_exceptions=True)
-
+    print(f"Image generation complete: {len(results)}/{total} succeeded")
     return results
