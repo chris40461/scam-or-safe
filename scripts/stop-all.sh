@@ -3,27 +3,34 @@
 
 echo "=== 서버 종료 중 ==="
 
-# uvicorn 프로세스 종료
+# 백엔드 종료 (uvicorn)
 echo "[1/2] 백엔드 서버 종료..."
-pkill -f "uvicorn app.main:app" 2>/dev/null
+pkill -f "uvicorn" 2>/dev/null
 
-# Next.js 개발 서버 종료
+# 프론트엔드 종료 (포트 3000 사용하는 모든 프로세스)
 echo "[2/2] 프론트엔드 서버 종료..."
-pkill -f "next-server" 2>/dev/null
-pkill -f "npm run dev" 2>/dev/null
+# Next.js 관련 프로세스 종료
+pkill -f "next" 2>/dev/null
+# 포트 3000을 직접 점유하는 프로세스 강제 종료
+lsof -ti :3000 | xargs kill -9 2>/dev/null
 
 # 포트 확인
 sleep 1
+
+echo ""
 if lsof -i :8000 >/dev/null 2>&1; then
-    echo "경고: 포트 8000이 아직 사용 중입니다."
+    echo "[!] 경고: 포트 8000이 아직 사용 중"
+    echo "    수동 종료: kill -9 \$(lsof -ti :8000)"
 else
-    echo "백엔드 종료 완료 (포트 8000)"
+    echo "[OK] 백엔드 종료 완료 (포트 8000)"
 fi
 
 if lsof -i :3000 >/dev/null 2>&1; then
-    echo "경고: 포트 3000이 아직 사용 중입니다."
+    echo "[!] 경고: 포트 3000이 아직 사용 중"
+    echo "    수동 종료: kill -9 \$(lsof -ti :3000)"
 else
-    echo "프론트엔드 종료 완료 (포트 3000)"
+    echo "[OK] 프론트엔드 종료 완료 (포트 3000)"
 fi
 
+echo ""
 echo "=== 종료 완료 ==="
