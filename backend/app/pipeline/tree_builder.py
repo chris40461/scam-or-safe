@@ -258,15 +258,15 @@ class ScenarioTreeBuilder:
             # 루트 노드 또는 엔딩 노드에만 이미지 생성
             if node.image_prompt and not node.image_url:
                 if node.depth == 0 or node.type.startswith("ending_"):
-                    tasks.append(self._generate_single_image(node))
+                    tasks.append(self._generate_single_image(node, tree.id))
 
         await asyncio.gather(*tasks, return_exceptions=True)
 
-    async def _generate_single_image(self, node: ScenarioNode):
+    async def _generate_single_image(self, node: ScenarioNode, scenario_id: str):
         """단일 노드에 이미지 생성"""
         async with self.semaphore:
             if node.image_prompt:
-                url = await generate_image(node.image_prompt, node.id)
+                url = await generate_image(node.image_prompt, node.id, scenario_id)
                 if url:
                     node.image_url = url
 

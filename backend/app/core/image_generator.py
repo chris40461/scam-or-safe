@@ -14,7 +14,7 @@ from app.config import settings
 IMAGES_DIR = Path(__file__).parent.parent / "data" / "images"
 
 
-def _generate_image_sync(prompt: str, node_id: str, retry_count: int = 0) -> str | None:
+def _generate_image_sync(prompt: str, node_id: str, scenario_id: str | None = None) -> str | None:
     """동기 이미지 생성 (스레드에서 실행, 지수 백오프 재시도)"""
     if not settings.gcp_project_id:
         print("Image generation skipped: GCP_PROJECT_ID not configured")
@@ -57,9 +57,12 @@ def _generate_image_sync(prompt: str, node_id: str, retry_count: int = 0) -> str
                 print(f"[{node_id}] Image generation returned no images")
                 return None
 
-            # 이미지 저장
+            # 이미지 저장 (파일명: {scenario_id}_{node_id}.png)
             image = response.generated_images[0].image
-            filename = f"{node_id}_{uuid4().hex[:8]}.png"
+            if scenario_id:
+                filename = f"{scenario_id}_{node_id}.png"
+            else:
+                filename = f"{node_id}_{uuid4().hex[:8]}.png"
             filepath = IMAGES_DIR / filename
 
             # PIL Image를 파일로 저장
@@ -87,11 +90,11 @@ def _generate_image_sync(prompt: str, node_id: str, retry_count: int = 0) -> str
     return None
 
 
-async def generate_image(prompt: str, node_id: str) -> str | None:
+async def generate_image(prompt: str, node_id: str, scenario_id: str | None = None) -> str | None:
     """비동기 이미지 생성 (스레드풀 사용)"""
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(
-        None, partial(_generate_image_sync, prompt, node_id)
+        None, partial(_generate_image_sync, prompt, node_id, scenario_id)
     )
 
 
