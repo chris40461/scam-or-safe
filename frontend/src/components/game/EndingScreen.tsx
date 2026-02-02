@@ -39,6 +39,20 @@ export function EndingScreen({
         {isGood ? "피해를 예방했습니다!" : "피싱에 당했습니다"}
       </h1>
 
+      {/* 엔딩 서사 */}
+      <div className="w-full max-w-md bg-surface-secondary/60 rounded-lg p-5 border border-gray-700">
+        {result.endingImageUrl && (
+          <img
+            src={result.endingImageUrl}
+            alt="엔딩 장면"
+            className="w-full rounded-lg mb-4 object-cover max-h-48"
+          />
+        )}
+        <p className="text-gray-200 leading-relaxed whitespace-pre-line">
+          {result.endingText}
+        </p>
+      </div>
+
       {/* 최종 자원 상태 */}
       <div className="w-full max-w-md bg-surface-secondary/60 rounded-lg p-4 border border-gray-700">
         <h2 className="text-sm font-semibold text-gray-400 mb-3">
