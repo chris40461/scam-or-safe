@@ -1,8 +1,11 @@
 """시나리오 트리 구조 검증 모듈"""
+import logging
 from dataclasses import dataclass
 from enum import Enum
 
 from app.models.scenario import ScenarioTree
+
+logger = logging.getLogger("pipeline.validation")
 
 
 class ErrorType(Enum):
@@ -95,5 +98,11 @@ def validate_structure(tree: ScenarioTree) -> list[ValidationError]:
                 node.id,
                 f"Node {node.id} exceeds max depth {settings.max_depth}"
             ))
+
+    if errors:
+        for err in errors:
+            logger.warning("검증 오류: %s - %s", err.error_type.value, err.message)
+    else:
+        logger.info("구조 검증 통과: 노드 %d개", len(tree.nodes))
 
     return errors

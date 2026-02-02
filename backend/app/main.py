@@ -1,9 +1,20 @@
 """FastAPI 애플리케이션 엔트리포인트"""
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.api.routes import scenario, crawler, images
+
+# 로깅 설정
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+    datefmt="%H:%M:%S",
+)
+# pipeline 하위 모듈 DEBUG 레벨 허용 (기본 INFO, 필요시 환경변수로 조정)
+logging.getLogger("pipeline").setLevel(logging.DEBUG)
 
 app = FastAPI(
     title="PhishGuard API",

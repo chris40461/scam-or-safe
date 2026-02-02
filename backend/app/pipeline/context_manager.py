@@ -1,10 +1,13 @@
 """컨텍스트 압축 관리 모듈"""
 import json
+import logging
 import litellm
 
 from app.config import settings
 from app.models.scenario import ScenarioNode, Choice
 from app.pipeline.prompts import CONTEXT_SUMMARY_PROMPT
+
+logger = logging.getLogger("pipeline.context_manager")
 
 
 async def summarize_nodes(nodes_with_choices: list[tuple[ScenarioNode, Choice | None]]) -> str:
@@ -45,7 +48,8 @@ async def summarize_nodes(nodes_with_choices: list[tuple[ScenarioNode, Choice | 
 
 async def build_story_path(
     path: list[tuple[ScenarioNode, Choice | None]],
-    current_depth: int
+    current_depth: int,
+    choice_taken: Choice | None = None
 ) -> str:
     """경로를 스토리 텍스트로 변환 (Progressive Compression)"""
     if not path:
@@ -58,7 +62,7 @@ async def build_story_path(
             parts.append(node.text)
             if choice:
                 parts.append(f'→ 선택: "{choice.text}"')
-        return "\n\n".join(parts)
+        result = "\n\n".join(parts)
 
     else:
         # 깊이 3+: 초기 노드 요약 + 최근 2개 노드 전체
@@ -66,6 +70,7 @@ async def build_story_path(
         recent_nodes = path[-2:]
 
         summary = await summarize_nodes(early_nodes) if early_nodes else ""
+        logger.debug("컨텍스트 압축: depth=%d, 요약 길이=%d", current_depth, len(summary))
 
         recent_parts = []
         for node, choice in recent_nodes:
@@ -76,8 +81,15 @@ async def build_story_path(
         recent_text = "\n\n".join(recent_parts)
 
         if summary:
-            return f"[이전 경과 요약]\n{summary}\n\n[최근 상황]\n{recent_text}"
-        return recent_text
+            result = f"[이전 경과 요약]\n{summary}\n\n[최근 상황]\n{recent_text}"
+        else:
+            result = recent_text
+
+    # 현재 선택을 별도로 추가 (텍스트 중복 방지)
+    if choice_taken:
+        result += f'\n\n→ 선택: "{choice_taken.text}"'
+
+    return result
 
 
 def estimate_tokens(text: str) -> int:

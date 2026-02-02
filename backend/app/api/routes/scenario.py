@@ -1,6 +1,7 @@
 """시나리오 API 라우트"""
 import json
 import asyncio
+import logging
 from pathlib import Path
 from uuid import uuid4
 from pydantic import BaseModel
@@ -8,6 +9,8 @@ from fastapi import APIRouter, HTTPException, BackgroundTasks
 
 from app.models.scenario import ScenarioTree
 from app.pipeline.tree_builder import ScenarioTreeBuilder
+
+logger = logging.getLogger("api.scenario")
 
 router = APIRouter(prefix="/scenarios", tags=["scenarios"])
 
@@ -94,6 +97,7 @@ async def _run_generation(task_id: str, request: GenerateRequest):
     """백그라운드에서 시나리오 생성 실행"""
     try:
         generation_tasks[task_id]["status"] = "generating"
+        logger.info("생성 시작: task=%s, type=%s, difficulty=%s", task_id, request.phishing_type, request.difficulty)
 
         builder = ScenarioTreeBuilder()
         scenario = await builder.build(
@@ -106,10 +110,12 @@ async def _run_generation(task_id: str, request: GenerateRequest):
 
         generation_tasks[task_id]["status"] = "completed"
         generation_tasks[task_id]["scenario_id"] = scenario.id
+        logger.info("생성 완료: task=%s, scenario=%s", task_id, scenario.id)
 
     except Exception as e:
         generation_tasks[task_id]["status"] = "failed"
         generation_tasks[task_id]["error"] = str(e)
+        logger.error("생성 실패: task=%s, error=%s", task_id, str(e))
 
 
 @router.post("/generate")
