@@ -1,15 +1,20 @@
 #!/bin/bash
 # 시나리오 생성 스크립트
-# 사용법: ./scripts/generate-scenario.sh [피싱유형] [난이도]
+# 사용법: ./scripts/generate-scenario.sh [피싱유형] [난이도] [시나리오 상세 설정]
 # 예시: ./scripts/generate-scenario.sh "보이스피싱" "hard"
+# 예시: ./scripts/generate-scenario.sh "검찰 사칭 보이스피싱" "hard" "피해자는 30대 직장인. 검찰을 사칭하여 명의도용 피해를 언급하며 계좌 이체 유도."
 
 PHISHING_TYPE="${1:-보이스피싱}"
 DIFFICULTY="${2:-medium}"
+SEED_INFO="${3:-}"
 BACKEND_URL="${BACKEND_URL:-http://localhost:8000}"
 
 echo "=== 시나리오 생성 ==="
 echo "피싱 유형: $PHISHING_TYPE"
 echo "난이도: $DIFFICULTY"
+if [ -n "$SEED_INFO" ]; then
+    echo "상세 설정: $SEED_INFO"
+fi
 echo ""
 
 # 백엔드 서버 확인
@@ -19,11 +24,31 @@ if ! curl -s "$BACKEND_URL/health" >/dev/null 2>&1; then
     exit 1
 fi
 
+# JSON 데이터 구성
+if [ -n "$SEED_INFO" ]; then
+    JSON_DATA=$(python3 -c "
+import json
+print(json.dumps({
+    'phishing_type': '''$PHISHING_TYPE''',
+    'difficulty': '''$DIFFICULTY''',
+    'seed_info': '''$SEED_INFO'''
+}, ensure_ascii=False))
+")
+else
+    JSON_DATA=$(python3 -c "
+import json
+print(json.dumps({
+    'phishing_type': '''$PHISHING_TYPE''',
+    'difficulty': '''$DIFFICULTY'''
+}, ensure_ascii=False))
+")
+fi
+
 # 시나리오 생성 요청
 echo "시나리오 생성 요청 중..."
 RESPONSE=$(curl -s -X POST "$BACKEND_URL/api/v1/scenarios/generate" \
     -H "Content-Type: application/json" \
-    -d "{\"phishing_type\": \"$PHISHING_TYPE\", \"difficulty\": \"$DIFFICULTY\"}")
+    -d "$JSON_DATA")
 
 TASK_ID=$(echo "$RESPONSE" | grep -o '"task_id":"[^"]*"' | cut -d'"' -f4)
 
@@ -45,6 +70,7 @@ while true; do
     case "$STATUS" in
         "completed")
             SCENARIO_ID=$(echo "$STATUS_RESPONSE" | grep -o '"scenario_id":"[^"]*"' | cut -d'"' -f4)
+            echo ""
             echo "=== 생성 완료 ==="
             echo "시나리오 ID: $SCENARIO_ID"
             echo "API: $BACKEND_URL/api/v1/scenarios/$SCENARIO_ID"
@@ -52,6 +78,7 @@ while true; do
             ;;
         "failed")
             ERROR=$(echo "$STATUS_RESPONSE" | grep -o '"error":"[^"]*"' | cut -d'"' -f4)
+            echo ""
             echo "=== 생성 실패 ==="
             echo "오류: $ERROR"
             exit 1
