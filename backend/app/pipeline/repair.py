@@ -1,14 +1,20 @@
 """시나리오 트리 복구 모듈"""
+import logging
+
 from app.models.scenario import ScenarioTree, ScenarioNode, EducationalContent
 from app.pipeline.validation import ValidationError, ErrorType
+
+logger = logging.getLogger("pipeline.repair")
 
 
 def repair_tree(tree: ScenarioTree, errors: list[ValidationError]) -> ScenarioTree:
     """검증 오류 복구"""
+    logger.info("복구 시작: %d건의 오류", len(errors))
     for error in errors:
         if error.error_type == ErrorType.ORPHAN_NODE:
             # 고아 노드 제거
             if error.node_id and error.node_id in tree.nodes:
+                logger.info("고아 노드 제거: %s", error.node_id)
                 del tree.nodes[error.node_id]
 
         elif error.error_type == ErrorType.BROKEN_LINK:
@@ -28,6 +34,7 @@ def repair_tree(tree: ScenarioTree, errors: list[ValidationError]) -> ScenarioTr
                             )
                             tree.nodes[fallback.id] = fallback
                             choice.next_node_id = fallback.id
+                            logger.info("끊어진 링크 복구: %s → %s", choice.id, fallback.id)
 
         elif error.error_type == ErrorType.NO_GOOD_ENDING:
             # GOOD 엔딩 추가
@@ -60,9 +67,11 @@ def repair_tree(tree: ScenarioTree, errors: list[ValidationError]) -> ScenarioTr
             if error.node_id:
                 node = tree.nodes.get(error.node_id)
                 if node:
+                    logger.info("리프→엔딩 변환: %s", error.node_id)
                     node.type = "ending_bad"
                     node.choices = []
 
+    logger.info("복구 완료: 최종 노드=%d", len(tree.nodes))
     return tree
 
 

@@ -88,6 +88,8 @@ export interface GameSession {
 /** 게임 결과 */
 export interface GameResult {
   ending: "good" | "bad";
+  endingText: string;
+  endingImageUrl: string | null;
   finalResources: Resources;
   choiceHistory: ChoiceHistoryItem[];
   educationalSummary: EducationalContent[];

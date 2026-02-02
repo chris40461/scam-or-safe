@@ -109,6 +109,8 @@ export function getResult(session: GameSession): GameResult {
 
   return {
     ending,
+    endingText: currentNode.text,
+    endingImageUrl: currentNode.image_url,
     finalResources: session.resources,
     choiceHistory: session.choiceHistory,
     educationalSummary,

@@ -1,10 +1,13 @@
 """LLM 노드 생성 모듈"""
 import json
 import asyncio
+import logging
 from pydantic import BaseModel
 import litellm
 
 from app.config import settings
+
+logger = logging.getLogger("pipeline.node_generator")
 from app.models.scenario import Resources, ResourceDelta, ScenarioNode, Choice
 from app.pipeline.prompts import (
     ROOT_SYSTEM_PROMPT,
@@ -44,11 +47,9 @@ class GenerationContext(BaseModel):
     ending_type_hint: str | None = None
 
 
-def infer_ending(resources: Resources) -> str:
-    """자원 상태 기반 엔딩 추론"""
-    good_score = (5 - resources.trust) + resources.awareness
-    bad_score = resources.trust + (5 - resources.money)
-    return "good" if good_score >= bad_score else "bad"
+def infer_ending_from_hint(ending_type_hint: str | None) -> str:
+    """엔딩 타입 힌트 기반 추론 (폴백용)"""
+    return ending_type_hint if ending_type_hint in ("good", "bad") else "bad"
 
 
 async def generate_root_node(
@@ -74,12 +75,14 @@ async def generate_root_node(
 
             content = response.choices[0].message.content
             data = json.loads(content)
-            return GenerationResult.model_validate(data)
+            result = GenerationResult.model_validate(data)
+            logger.info("Root 노드 생성 성공: type=%s, choices=%d", result.node_type, len(result.choices))
+            return result
 
         except Exception as e:
             if attempt == settings.retry_count:
                 # 폴백: 기본 루트 노드
-                print(f"[Root Generator] All retries failed, using fallback: {str(e)[:100]}")
+                logger.warning("Root 생성 실패, 폴백 사용: %s", str(e)[:100])
                 return GenerationResult(
                     node_type="narrative",
                     narrative_text=f"당신의 휴대폰에 알 수 없는 번호로 연락이 왔습니다. {phishing_type} 관련 의심스러운 내용입니다.",
@@ -92,7 +95,7 @@ async def generate_root_node(
                 )
             # 지수 백오프: 1s, 2s, 4s
             delay = 1 * (2 ** attempt)
-            print(f"[Root Generator] Attempt {attempt + 1} failed, retrying in {delay}s...")
+            logger.warning("Root 생성 attempt %d 실패, %ds 후 재시도...", attempt + 1, delay)
             await asyncio.sleep(delay)
 
 
@@ -126,13 +129,18 @@ async def generate_node(context: GenerationContext) -> GenerationResult:
 
             content = response.choices[0].message.content
             data = json.loads(content)
-            return GenerationResult.model_validate(data)
+            result = GenerationResult.model_validate(data)
+            logger.info(
+                "노드 생성 성공: depth=%d, type=%s, choices=%d",
+                context.current_depth, result.node_type, len(result.choices)
+            )
+            return result
 
         except Exception as e:
             if attempt == settings.retry_count:
                 # 폴백: 강제 종료가 필요하거나 최대 깊이에 도달한 경우에만 엔딩 노드 생성
                 if context.force_end or context.current_depth >= context.max_depth - 1:
-                    ending_type = context.ending_type_hint or infer_ending(context.current_resources)
+                    ending_type = infer_ending_from_hint(context.ending_type_hint)
                     image_prompt = (
                         "A relieved person realizing they avoided a scam, bright lighting, hopeful atmosphere, Korean urban setting, webtoon style"
                         if ending_type == "good"
@@ -147,7 +155,7 @@ async def generate_node(context: GenerationContext) -> GenerationResult:
                     )
 
                 # 폴백: 내러티브 노드 (계속 진행 가능)
-                print(f"[Fallback] Creating narrative node at depth {context.current_depth} due to LLM failure: {str(e)[:100]}")
+                logger.warning("노드 생성 실패, 폴백 내러티브 (depth=%d): %s", context.current_depth, str(e)[:100])
                 return GenerationResult(
                     node_type="narrative",
                     narrative_text="상황이 계속되고 있습니다. 어떻게 대응하시겠습니까?",
@@ -168,7 +176,7 @@ async def generate_node(context: GenerationContext) -> GenerationResult:
                 )
             # 지수 백오프: 1s, 2s, 4s
             delay = 1 * (2 ** attempt)
-            print(f"[Node Generator] Attempt {attempt + 1} failed, retrying in {delay}s...")
+            logger.warning("노드 생성 attempt %d 실패 (depth=%d), %ds 후 재시도...", attempt + 1, context.current_depth, delay)
             await asyncio.sleep(delay)
 
 

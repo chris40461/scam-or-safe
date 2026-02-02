@@ -1,9 +1,16 @@
 """시나리오 트리 빌더 (메인 오케스트레이터)"""
 import asyncio
+import json
+import logging
 from datetime import datetime, timezone
+from pathlib import Path
 from uuid import uuid4
 
 from app.config import settings
+
+logger = logging.getLogger("pipeline.tree_builder")
+
+SCENARIOS_DIR = Path(__file__).parent.parent / "data" / "scenarios"
 from app.models.scenario import ScenarioTree, ScenarioNode, Choice, Resources
 from app.pipeline.node_generator import (
     generate_root_node,
@@ -38,6 +45,7 @@ class ScenarioTreeBuilder:
     ) -> ScenarioTree:
         """전체 시나리오 트리 생성"""
         self.node_counter = 0
+        logger.info("=== Pipeline Start: type=%s, difficulty=%s ===", phishing_type, difficulty)
 
         try:
             async with asyncio.timeout(settings.pipeline_timeout):
@@ -54,24 +62,39 @@ class ScenarioTreeBuilder:
                     nodes={root.id: root},
                     created_at=datetime.now(timezone.utc),
                 )
+                logger.info("[Phase 1/5] Seed 완료: choices=%d", len(root.choices))
+                self._save_progress(tree, "phase1_seed")
 
                 # Phase 2: BFS Expand (병렬 확장)
                 frontier = [(root, choice) for choice in root.choices]
+                level = 0
                 while frontier:
+                    level += 1
+                    logger.info("[Phase 2/5] Level %d: %d개 브랜치 확장 중...", level, len(frontier))
                     frontier = await self._expand_level(tree, phishing_type, difficulty, frontier)
+                    logger.info("[Phase 2/5] Level %d 완료: 총 노드=%d", level, len(tree.nodes))
+                    self._save_progress(tree, f"phase2_level{level}")
 
-                # Phase 3: Enrich (교육 콘텐츠)
-                await self._enrich_endings(tree, phishing_type)
+                # Phase 3: Enrich (교육 콘텐츠) - 현재 비활성화, 폴백 교육 콘텐츠만 사용
+                logger.info("[Phase 3/5] Enrich 스킵 (폴백 교육 콘텐츠만 사용)")
+                self._save_progress(tree, "phase3_enrich_skipped")
 
                 # Phase 4: Image 생성 (주요 노드만)
+                logger.info("[Phase 4/5] 이미지 생성 중...")
                 await self._generate_images(tree)
+                logger.info("[Phase 4/5] Image 완료")
+                self._save_progress(tree, "phase4_image")
 
                 # Phase 5: Validate & Repair
+                logger.info("[Phase 5/5] 구조 검증 및 복구 중...")
                 tree = await self._validate_and_repair(tree)
+                logger.info("[Phase 5/5] Validate 완료: 최종 노드=%d", len(tree.nodes))
 
+                logger.info("=== Pipeline Complete: %s (nodes=%d) ===", tree.id, len(tree.nodes))
                 return tree
 
         except asyncio.TimeoutError:
+            logger.error("Pipeline timeout exceeded")
             raise RuntimeError("Pipeline timeout exceeded")
 
     async def _generate_root(
@@ -118,15 +141,24 @@ class ScenarioTreeBuilder:
     ) -> tuple[ScenarioNode, list[tuple[ScenarioNode, Choice]]]:
         """개별 브랜치 확장"""
         async with self.semaphore:
-            # 1. 경로 추적
+            # 1. 경로 추적 (parent까지 포함, 중복 append 하지 않음)
             path = self._trace_path_to(tree, parent.id)
-            path.append((parent, choice))
 
-            # 2. 자원 계산
+            # 2. 자원 계산: path의 choice + 현재 choice 별도 적용
             resources = self._compute_resources(path)
+            resources.trust = max(0, min(5,
+                resources.trust + choice.resource_effect.trust
+            ))
+            resources.money = max(0, min(5,
+                resources.money + choice.resource_effect.money
+            ))
+            resources.awareness = max(0, min(5,
+                resources.awareness + choice.resource_effect.awareness
+            ))
 
-            # 3. 선택 목록 추출
+            # 3. 선택 목록: path의 choice + 현재 choice 명시적 추가
             path_choices = [c for _, c in path if c is not None]
+            path_choices.append(choice)
 
             # 4. 종료 신호
             depth = parent.depth + 1
@@ -134,8 +166,8 @@ class ScenarioTreeBuilder:
                 resources, depth, settings.max_depth, path_choices
             )
 
-            # 5. 컨텍스트 압축
-            story_path = await build_story_path(path, depth)
+            # 5. 컨텍스트 압축 (현재 선택을 별도 전달하여 텍스트 중복 방지)
+            story_path = await build_story_path(path, depth, choice_taken=choice)
 
             # 6. 노드 생성
             context = GenerationContext(
@@ -270,13 +302,30 @@ class ScenarioTreeBuilder:
                 if url:
                     node.image_url = url
 
+    def _save_progress(self, tree: ScenarioTree, phase: str):
+        """파이프라인 진행 상황을 JSON으로 중간 저장"""
+        progress_dir = SCENARIOS_DIR / "progress"
+        progress_dir.mkdir(parents=True, exist_ok=True)
+        filepath = progress_dir / f"{tree.id}.json"
+        data = tree.model_dump(mode="json")
+        data["_progress"] = {
+            "phase": phase,
+            "node_count": len(tree.nodes),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        logger.info("Progress saved: %s (%s, nodes=%d)", filepath.name, phase, len(tree.nodes))
+
     async def _validate_and_repair(self, tree: ScenarioTree) -> ScenarioTree:
         """구조 검증 및 복구"""
-        for _ in range(3):  # 최대 3회 복구 시도
+        for attempt in range(3):  # 최대 3회 복구 시도
             errors = validate_structure(tree)
             if not errors:
+                logger.info("구조 검증 통과 (attempt=%d)", attempt + 1)
                 return tree
 
+            logger.warning("구조 검증 오류 %d건 발견, 복구 시도 %d/3", len(errors), attempt + 1)
             tree = repair_tree(tree, errors)
 
         return tree

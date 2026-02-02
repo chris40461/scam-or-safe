@@ -51,10 +51,6 @@ out/
 Thumbs.db
 
 # Project specific
-backend/app/data/scenarios/*.json
-!backend/app/data/seed_scenarios/*.json
-backend/app/data/news_cache/
-backend/app/data/images/
 backend/credentials/
 
 # Claude Code
