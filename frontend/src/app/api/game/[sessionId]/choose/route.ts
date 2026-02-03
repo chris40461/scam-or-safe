@@ -6,10 +6,14 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ sessionId: string }> }
 ) {
+  let sessionId: string | undefined;
+  let choiceId: string | undefined;
+
   try {
-    const { sessionId } = await params;
+    const paramsData = await params;
+    sessionId = paramsData.sessionId;
     const body = await request.json();
-    const { choiceId } = body;
+    choiceId = body.choiceId;
 
     if (!choiceId) {
       return NextResponse.json(
@@ -35,6 +39,13 @@ export async function POST(
         : null;
 
     // 선택 처리
+    console.log("Processing choice:", {
+      sessionId,
+      choiceId,
+      currentNodeId: session.currentNodeId,
+      availableChoices: currentNode.choices.map(c => c.id),
+    });
+
     const newSession = processChoice(session, choiceId);
     sessions.set(sessionId, newSession);
 
@@ -43,9 +54,17 @@ export async function POST(
       educationalContent,
     });
   } catch (error) {
-    console.error("Failed to process choice:", error);
+    console.error("Failed to process choice:", {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      sessionId,
+      choiceId,
+    });
     return NextResponse.json(
-      { error: "Failed to process choice" },
+      {
+        error: "Failed to process choice",
+        details: error instanceof Error ? error.message : String(error),
+      },
       { status: 500 }
     );
   }
