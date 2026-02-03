@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useGameStore } from "@/hooks/useGameStore";
 import { StatusBar } from "./StatusBar";
@@ -15,6 +15,7 @@ interface GameContainerProps {
 
 export function GameContainer({ scenarioId }: GameContainerProps) {
   const router = useRouter();
+  const [showPrologue, setShowPrologue] = useState(true);
   const {
     session,
     currentNode,
@@ -72,6 +73,30 @@ export function GameContainer({ scenarioId }: GameContainerProps) {
   // 세션 없음
   if (!session || !currentNode) {
     return null;
+  }
+
+  // 프롤로그 화면 (이전 상황 설명)
+  const prologue = session.scenarioTree?.prologue;
+  if (prologue && showPrologue) {
+    return (
+      <div className="flex flex-col gap-6">
+        <div className="p-6 bg-surface-secondary/60 border border-gray-700 rounded-lg">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-2xl">📜</span>
+            <h2 className="text-lg font-semibold text-gray-200">지금까지의 상황</h2>
+          </div>
+          <p className="text-gray-300 leading-relaxed italic">
+            {prologue}
+          </p>
+        </div>
+        <button
+          onClick={() => setShowPrologue(false)}
+          className="w-full py-4 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-lg transition-colors"
+        >
+          시작하기
+        </button>
+      </div>
+    );
   }
 
   // 게임 종료

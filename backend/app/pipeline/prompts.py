@@ -37,9 +37,15 @@ ROOT_SYSTEM_PROMPT = f"""당신은 피싱 예방 교육을 위한 텍스트 어�
 - money(자산): 송금/결제하면 -, 거부하면 변동 없음
 - awareness(경각심): 경고 신호를 인지하면 +, 무시하면 -
 
-선택지 작성 규칙:
+선택지 작성 규칙 (교육 효과를 위해 매우 중요):
 - 각 노드에 2-3개의 선택지 제공
-- 최소 1개는 위험한 선택(is_dangerous=true), 1개는 안전한 선택
+- 모든 선택지가 표면적으로 합리적이고 그럴듯해 보여야 함
+- 위험한 선택(is_dangerous=true)도 납득할 만한 이유가 있어야 함:
+  * "급하니까 일단 해야겠다", "공식 기관이니까 믿어도 되겠지", "안 하면 문제가 커질 것 같다"
+- 안전한 선택도 번거롭거나 불편해 보일 수 있음:
+  * "직접 확인하려면 시간이 오래 걸린다", "괜히 의심해서 관계가 나빠질 수 있다"
+- 선택지 텍스트만으로는 어떤 것이 위험한지 명확히 알 수 없어야 함 (실제 피싱 상황처럼)
+- is_dangerous 속성은 내부 로직용으로만 사용 (사용자에게 노출 안 됨)
 - 선택지 텍스트는 1-2문장으로 간결하게
 {IMAGE_PROMPT_GUIDE}"""
 
@@ -53,6 +59,12 @@ NODE_SYSTEM_PROMPT = f"""당신은 피싱 시나리오의 다음 장면을 생�
 - 플레이어의 선택에 대한 직접적인 결과/반응으로 다음 장면을 시작하세요
 - 사기범의 말투, 태도, 전략이 이전 장면과 일관되어야 합니다
 - 선택의 결과가 논리적으로 자연스러워야 합니다 (예: 의심하는 선택 → 사기범이 더 교묘하게 설득 시도)
+
+선택지 작성 규칙 (교육 효과를 위해 매우 중요):
+- 모든 선택지가 표면적으로 합리적이고 그럴듯해 보여야 함
+- 위험한 선택도 납득할 만한 이유가 있어야 함 (급박함, 권위에 대한 신뢰, 두려움 등)
+- 안전한 선택도 번거롭거나 불편해 보일 수 있음 (시간 소요, 관계 악화 우려 등)
+- 선택지 텍스트만으로는 어떤 것이 위험한지 명확히 알 수 없어야 함
 
 종료 신호 처리:
 - should_end=true이고 force=true: 반드시 엔딩(ending_good 또는 ending_bad)으로 작성, choices는 빈 리스트
@@ -85,10 +97,15 @@ def build_root_prompt(phishing_type: str, difficulty: str, seed_info: str | None
     prompt = f"""피싱 유형: {phishing_type}
 난이도: {difficulty}
 
-이 피싱 유형의 첫 장면을 작성하세요.
-- 피해자가 피싱 시도를 처음 접하는 상황
-- 전화, 문자, 이메일 등 접촉 방식 포함
+중요: 시나리오는 이미 진행 중인 상황에서 시작합니다.
+- 피해자가 피싱 시도를 '처음' 접하는 것이 아니라, 이미 어느 정도 연루된 상황
+- prologue: 며칠 전부터의 상황을 요약 (2-3문장)
+- narrative_text: 중요한 결정을 해야 하는 현재 순간부터 시작
 - 2-3개의 선택지 제공
+
+예시:
+- prologue: "며칠 전 검찰이라고 밝힌 사람에게서 전화를 받았습니다. 당신의 명의로 대포통장이 개설되어 수사 중이라며 주민번호를 요청했고, 불안한 마음에 알려주었습니다."
+- narrative_text: "오늘 아침, 다시 그 사람에게서 전화가 왔습니다. 안전한 계좌로 자금을 옮겨야 한다며..."
 
 """
     if seed_info:
@@ -99,6 +116,7 @@ def build_root_prompt(phishing_type: str, difficulty: str, seed_info: str | None
 
     prompt += """JSON 형식:
 {
+  "prologue": "이전 상황 요약 (한국어, 2-3문장. 이미 어느 정도 연루된 상태 설명)",
   "protagonist": {
     "age_group": "young adult|middle-aged|elderly",
     "gender": "man|woman",
@@ -106,7 +124,7 @@ def build_root_prompt(phishing_type: str, difficulty: str, seed_info: str | None
     "appearance": "외모 디테일 영문"
   },
   "node_type": "narrative",
-  "narrative_text": "2인칭 시점 나레이션 (한국어, 3-5문장)",
+  "narrative_text": "2인칭 시점 나레이션 (한국어, 3-5문장. 현재 순간의 상황)",
   "choices": [
     {
       "text": "선택지 텍스트",

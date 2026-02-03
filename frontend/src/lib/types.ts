@@ -12,6 +12,14 @@ export interface ResourceDelta {
   awareness: number;
 }
 
+/** 주인공 프로필 */
+export interface ProtagonistProfile {
+  age_group: "young adult" | "middle-aged" | "elderly";
+  gender: "man" | "woman";
+  description: string;
+  appearance: string;
+}
+
 /** 교육 콘텐츠 */
 export interface EducationalContent {
   title: string;
@@ -52,6 +60,8 @@ export interface ScenarioTree {
   difficulty: "easy" | "medium" | "hard";
   root_node_id: string;
   nodes: Record<string, ScenarioNode>;
+  protagonist?: ProtagonistProfile;
+  prologue?: string;  // 이전 상황 설명 (중간부터 시작)
   created_at: string;
   metadata: Record<string, unknown>;
 }

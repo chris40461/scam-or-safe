@@ -67,5 +67,6 @@ class ScenarioTree(BaseModel):
     root_node_id: str
     nodes: dict[str, ScenarioNode]
     protagonist: ProtagonistProfile | None = None
+    prologue: str | None = None  # 이전 상황 설명 (중간부터 시작)
     created_at: datetime
     metadata: dict = Field(default_factory=dict)

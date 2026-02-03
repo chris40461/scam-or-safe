@@ -27,6 +27,9 @@ def infer_ending(path_choices: list[Choice]) -> str:
     return "bad"
 
 
+MIN_DEPTH_FOR_ENDING = 3  # 최소 3단계 진행 후에만 엔딩 가능
+
+
 def compute_end_signal(
     resources: Resources,
     depth: int,
@@ -40,11 +43,22 @@ def compute_end_signal(
         logger.info("EndSignal: end_%s (depth=%d, reason=%s, force=%s)", ending_type, depth, reason, force)
         return signal
 
+    # Rule 0 (최우선): 최소 깊이 미달 → 무조건 계속 진행
+    # money=0이어도 depth < 3이면 엔딩 불가 (게임이 너무 빨리 끝나지 않도록)
+    if depth < MIN_DEPTH_FOR_ENDING:
+        logger.debug("EndSignal: continue (depth=%d < MIN_DEPTH=%d)", depth, MIN_DEPTH_FOR_ENDING)
+        return EndSignal(
+            should_end=False,
+            ending_type=None,
+            reason="min_depth_not_reached",
+            force=False
+        )
+
     # Rule 1: 최대 깊이 도달 → 강제 종료 (선택 패턴 기반 엔딩 유형)
     if depth >= max_depth:
         return _end(infer_ending(path_choices), "max_depth", True)
 
-    # Rule 2: money=0 → 강제 BAD (금전 피해)
+    # Rule 2: money=0 → 강제 BAD (금전 피해) - 이제 depth >= 3에서만 적용됨
     if resources.money <= 0:
         return _end("bad", "money_depleted", True)
 

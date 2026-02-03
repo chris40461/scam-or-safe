@@ -50,7 +50,7 @@ class ScenarioTreeBuilder:
         try:
             async with asyncio.timeout(settings.pipeline_timeout):
                 # Phase 1: Seed (루트 노드 생성)
-                root, protagonist_data = await self._generate_root(phishing_type, difficulty, seed_info)
+                root, protagonist_data, prologue = await self._generate_root(phishing_type, difficulty, seed_info)
 
                 # 주인공 프로필 변환
                 from app.models.scenario import ProtagonistProfile
@@ -62,6 +62,10 @@ class ScenarioTreeBuilder:
                     except Exception as e:
                         logger.warning("주인공 프로필 변환 실패: %s", e)
 
+                # 프롤로그 로깅
+                if prologue:
+                    logger.info("프롤로그 생성: %s...", prologue[:50] if len(prologue) > 50 else prologue)
+
                 tree = ScenarioTree(
                     id=f"scenario_{uuid4().hex[:8]}",
                     title=f"{phishing_type} 시나리오",
@@ -71,9 +75,10 @@ class ScenarioTreeBuilder:
                     root_node_id=root.id,
                     nodes={root.id: root},
                     protagonist=protagonist,
+                    prologue=prologue,
                     created_at=datetime.now(timezone.utc),
                 )
-                logger.info("[Phase 1/5] Seed 완료: choices=%d", len(root.choices))
+                logger.info("[Phase 1/5] Seed 완료: choices=%d, prologue=%s", len(root.choices), bool(prologue))
                 self._save_progress(tree, "phase1_seed")
 
                 # Phase 2: BFS Expand (병렬 확장)
@@ -113,11 +118,11 @@ class ScenarioTreeBuilder:
         phishing_type: str,
         difficulty: str,
         seed_info: str | None
-    ) -> tuple[ScenarioNode, dict | None]:
-        """루트 노드 생성 (주인공 정보 포함)"""
+    ) -> tuple[ScenarioNode, dict | None, str | None]:
+        """루트 노드 생성 (주인공 정보 + 프롤로그 포함)"""
         result = await generate_root_node(phishing_type, difficulty, seed_info)
         node = result_to_node(result, self._next_node_id(), depth=0)
-        return node, result.protagonist
+        return node, result.protagonist, result.prologue
 
     async def _expand_level(
         self,
