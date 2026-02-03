@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     # Google Gemini API (LLM용)
     gemini_api_key: str = ""
     llm_model: str = "gemini/gemini-3-flash-preview"
-    image_model: str = "gemini/gemini-2.5-flash-image"
+    image_model: str = "imagen-4.0-fast-generate-001"
 
     # Google Cloud Vertex AI (Imagen 이미지 생성용)
     google_application_credentials: str = ""
@@ -30,10 +30,12 @@ class Settings(BaseSettings):
     llm_timeout: int = 60
     pipeline_timeout: int = 600
 
-    # 이미지 생성 설정 (rate limiting 대응)
-    image_max_concurrent: int = 1  # 순차 처리로 할당량 초과 방지
-    image_retry_count: int = 3
-    image_retry_delay: float = 2.0  # 기본 딜레이 (지수 백오프 적용)
+    # 이미지 생성 설정 (Imagen 4.0 Fast: 분당 150 요청 제한)
+    image_max_concurrent: int = 10  # 병렬 처리 수 (10개 동시)
+    image_retry_count: int = 3      # 재시도 횟수
+    image_retry_delay: float = 1.0  # 재시도 간격 (초)
+    image_batch_size: int = 25      # 배치 크기
+    image_batch_wait: float = 12.0  # 배치 간 대기 (초)
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
