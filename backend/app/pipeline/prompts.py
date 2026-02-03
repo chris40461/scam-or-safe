@@ -5,7 +5,11 @@ IMAGE_PROMPT_GUIDE = """
 image_prompt 작성 규칙 (매우 중요):
 - 반드시 영문으로 작성
 - 스타일을 프롬프트 앞과 끝에 모두 명시 (중요!)
-  * 형식: "Korean webtoon style illustration: [장면 묘사]. Webtoon art style."
+  * 형식: "Korean webtoon style illustration: [장면 묘사]. Webtoon art style, no text."
+- 텍스트 렌더링 금지 (매우 중요!):
+  * 이미지에 어떤 텍스트, 글자, 문자, 간판 글씨도 포함하지 않음
+  * 프롬프트 끝에 반드시 "no text, no letters, no words, no typography" 추가
+  * "Korean text on signs" 같은 텍스트 요청 금지
 - 구체적인 장면, 인물, 감정, 환경을 묘사
 - 다양한 시각적 요소를 포함:
   * 장소: 거실, 사무실, 지하철, 카페, 은행, 경찰서, 병원 대기실 등
@@ -19,7 +23,7 @@ image_prompt 작성 규칙 (매우 중요):
   * 공포: wide eyes, pale face, trembling hands
   * 안도: relieved expression, deep breath, relaxed shoulders
   * 후회: head in hands, tears, looking down
-- 한국적 요소 포함: Korean text on signs, Korean apartment, Korean cafe
+- 한국적 요소 포함: Korean apartment, Korean cafe, Korean street (텍스트 없이)
 - 매 장면마다 다른 구도와 시점 사용
 """
 
@@ -127,7 +131,7 @@ protagonist 예시 (참고용):
 
 image_prompt 작성 시:
 - 스타일을 프롬프트 앞과 끝에 모두 명시 (스타일 일관성을 위해 매우 중요!)
-- 예시 형식: "Korean webtoon style illustration: [주인공 description], [주인공 appearance], [장면 묘사]. Webtoon art style."
+- 예시 형식: "Korean webtoon style illustration: [주인공 description], [주인공 appearance], [장면 묘사]. Webtoon art style, no text, no letters."
 - 주인공의 description과 appearance를 정확히 포함
 - 장면, 감정, 배경을 구체적으로 묘사
 
@@ -221,16 +225,16 @@ CRITICAL: image_prompt 작성 시 주인공을 반드시 포함하세요:
 - 프롬프트 끝에도 스타일 명시: \"Webtoon art style.\"
 
 image_prompt 예시 (주인공 정보 포함):
-- "Korean webtoon style illustration: {protagonist.description}, {protagonist.appearance}, sitting in a modern Korean cafe, staring at phone screen with confused expression, coffee cup on table, afternoon sunlight through window. Webtoon art style."
-- "Korean webtoon style illustration: {protagonist.description}, {protagonist.appearance}, standing at ATM machine in convenience store at night, sweating nervously, harsh fluorescent lighting, tense atmosphere. Webtoon art style."
-- "Korean webtoon style illustration: {protagonist.description}, {protagonist.appearance}, in a living room at home, holding smartphone, worried expression, family photos on wall, warm lamp light. Webtoon art style."
+- "Korean webtoon style illustration: {protagonist.description}, {protagonist.appearance}, sitting in a modern Korean cafe, staring at phone screen with confused expression, coffee cup on table, afternoon sunlight through window. Webtoon art style, no text, no letters."
+- "Korean webtoon style illustration: {protagonist.description}, {protagonist.appearance}, standing at ATM machine in convenience store at night, sweating nervously, harsh fluorescent lighting, tense atmosphere. Webtoon art style, no text, no letters."
+- "Korean webtoon style illustration: {protagonist.description}, {protagonist.appearance}, in a living room at home, holding smartphone, worried expression, family photos on wall, warm lamp light. Webtoon art style, no text, no letters."
 """
     else:
         prompt += """
 image_prompt 예시 (이전 장면과 다르게 작성):
-- narrative: "A stressed Korean person hunched over a laptop in a dimly lit home office at midnight, multiple browser tabs open, empty coffee cups on desk, worried expression, blue screen light illuminating face, webtoon style"
-- ending_good: "A relieved Korean person sitting at a police station, officer in uniform taking notes, bright fluorescent lights, certificates on wall, showing phone screen as evidence, hopeful expression, Korean text visible on documents, manhwa style illustration"
-- ending_bad: "A devastated Korean person sitting alone on a park bench at dusk, head in hands, crumpled bank statement on the ground, autumn leaves falling, empty wallet visible, tears on cheeks, melancholic atmosphere, webtoon style"
+- narrative: "A stressed Korean person hunched over a laptop in a dimly lit home office at midnight, multiple browser tabs open, empty coffee cups on desk, worried expression, blue screen light illuminating face, webtoon style, no text, no letters"
+- ending_good: "A relieved Korean person sitting at a police station, officer in uniform taking notes, bright fluorescent lights, certificates on wall, showing phone screen as evidence, hopeful expression, manhwa style illustration, no text, no letters"
+- ending_bad: "A devastated Korean person sitting alone on a park bench at dusk, head in hands, crumpled bank statement on the ground, autumn leaves falling, empty wallet visible, tears on cheeks, melancholic atmosphere, webtoon style, no text, no letters"
 """
 
     prompt += "\nIMPORTANT: image_prompt는 필수. 이전 노드와 중복되지 않는 새로운 장면을 묘사하세요."

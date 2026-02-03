@@ -92,7 +92,7 @@ async def generate_root_node(
                         ChoiceResult(text="응답한다", is_dangerous=True, resource_effect={"trust": 1, "money": 0, "awareness": 0}),
                         ChoiceResult(text="무시한다", is_dangerous=False, resource_effect={"trust": -1, "money": 0, "awareness": 1}),
                     ],
-                    image_prompt="A middle-aged Korean person in casual home clothes, receiving a suspicious phone call, tense atmosphere, modern Korean apartment living room, dark lighting, webtoon style illustration",
+                    image_prompt="A middle-aged Korean person in casual home clothes, receiving a suspicious phone call, tense atmosphere, modern Korean apartment living room, dark lighting, webtoon style illustration, no text, no letters",
                     reasoning=f"LLM 호출 실패로 폴백 노드 생성: {str(e)}"
                 )
             # 지수 백오프: 1s, 2s, 4s
@@ -150,9 +150,9 @@ async def generate_node(context: GenerationContext) -> GenerationResult:
                     else:
                         protagonist_desc = "A middle-aged Korean person in casual clothes"
                     image_prompt = (
-                        f"{protagonist_desc}, relieved expression, sitting at home, bright lighting, hopeful atmosphere, Korean apartment setting, webtoon style illustration"
+                        f"{protagonist_desc}, relieved expression, sitting at home, bright lighting, hopeful atmosphere, Korean apartment setting, webtoon style illustration, no text, no letters"
                         if ending_type == "good"
-                        else f"{protagonist_desc}, devastated expression, head in hands, dark atmosphere, regret and despair, Korean apartment setting, webtoon style illustration"
+                        else f"{protagonist_desc}, devastated expression, head in hands, dark atmosphere, regret and despair, Korean apartment setting, webtoon style illustration, no text, no letters"
                     )
                     return GenerationResult(
                         node_type=f"ending_{ending_type}",
@@ -184,7 +184,7 @@ async def generate_node(context: GenerationContext) -> GenerationResult:
                             resource_effect={"trust": 1, "money": -1, "awareness": 0}
                         ),
                     ],
-                    image_prompt=f"{protagonist_desc}, contemplating a decision, worried expression, modern Korean setting, tense atmosphere, webtoon style illustration",
+                    image_prompt=f"{protagonist_desc}, contemplating a decision, worried expression, modern Korean setting, tense atmosphere, webtoon style illustration, no text, no letters",
                     reasoning=f"LLM 호출 실패로 폴백 내러티브 노드 생성 (트리 확장 계속): {str(e)}"
                 )
             # 지수 백오프: 1s, 2s, 4s
