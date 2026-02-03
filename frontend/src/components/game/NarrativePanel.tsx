@@ -10,6 +10,23 @@ interface NarrativePanelProps {
   speed?: number;
 }
 
+// 텍스트 가독성을 위한 전처리 함수
+function formatNarrativeText(text: string): string {
+  // 1. 마침표, 느낌표, 물음표 뒤에 줄바꿈 추가 (먼저 처리)
+  let formatted = text.replace(/([.!?])\s+/g, "$1\n");
+
+  // 2. 큰따옴표와 작은따옴표로 감싼 대사를 별도 줄로 분리 (나중에 처리)
+  formatted = formatted.replace(/("[^"]+"|'[^']+')/g, "\n\n$1\n\n");
+
+  // 3. 연속된 줄바꿈을 2개로 제한
+  formatted = formatted.replace(/\n{3,}/g, "\n\n");
+
+  // 4. 시작과 끝의 불필요한 공백 제거
+  formatted = formatted.trim();
+
+  return formatted;
+}
+
 export function NarrativePanel({
   text,
   imageUrl,
@@ -17,7 +34,8 @@ export function NarrativePanel({
   speed = 30,
 }: NarrativePanelProps) {
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
-  const { displayedText, isComplete, skip } = useTypingEffect(text, {
+  const formattedText = formatNarrativeText(text);
+  const { displayedText, isComplete, skip } = useTypingEffect(formattedText, {
     speed,
     onComplete,
   });
@@ -61,8 +79,8 @@ export function NarrativePanel({
       )}
 
       {/* 텍스트 영역 */}
-      <div className="p-6">
-        <p className="text-lg leading-relaxed whitespace-pre-wrap font-light">
+      <div className="p-6 sm:p-8">
+        <p className="text-base sm:text-lg leading-loose whitespace-pre-wrap font-light text-gray-200">
           {displayedText}
           {!isComplete && (
             <span className="inline-block w-2 h-5 bg-cyan-400 ml-1 animate-pulse" />
@@ -70,7 +88,7 @@ export function NarrativePanel({
         </p>
 
         {/* 스크린 리더용 전체 텍스트 */}
-        <span className="sr-only">{text}</span>
+        <span className="sr-only">{formattedText}</span>
       </div>
 
       {/* 스킵 힌트 */}
