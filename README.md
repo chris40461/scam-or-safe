@@ -6,7 +6,8 @@
 
 - **Backend**: FastAPI, Pydantic v2, LiteLLM
 - **Frontend**: Next.js 15, TypeScript, Tailwind CSS 4, Zustand
-- **LLM**: Google Gemini (gemini-2.5-flash)
+- **LLM**: Google Gemini (gemini-3-flash-preview)
+- **Image Generation**: Google Imagen (imagen-4.0-fast-generate-001)
 - **News API**: Naver Search API
 
 ## 프로젝트 구조
@@ -16,7 +17,7 @@ scamsimulator/
 ├── backend/                 # FastAPI 백엔드
 │   ├── app/
 │   │   ├── api/routes/      # API 엔드포인트
-│   │   ├── core/            # 뉴스 크롤러
+│   │   ├── core/            # 뉴스 크롤러, 이미지 생성
 │   │   ├── data/            # 시나리오 데이터
 │   │   ├── models/          # Pydantic 모델
 │   │   └── pipeline/        # LLM 시나리오 생성 파이프라인
@@ -122,6 +123,8 @@ curl -X POST http://localhost:8000/api/v1/crawler/run \
 | POST | /api/v1/crawler/run | 뉴스 크롤링 |
 | GET | /api/v1/crawler/status/{task_id} | 크롤링 상태 |
 | GET | /api/v1/crawler/articles | 분석된 기사 목록 |
+| GET | /api/v1/scenarios/{task_id}/status | 생성 작업 상태 |
+| GET | /api/v1/images/{filename} | 이미지 서빙 |
 
 ## Docker 실행
 
