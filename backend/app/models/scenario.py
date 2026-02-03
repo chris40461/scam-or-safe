@@ -18,6 +18,14 @@ class ResourceDelta(BaseModel):
     awareness: int = Field(default=0, ge=-2, le=2)
 
 
+class ProtagonistProfile(BaseModel):
+    """주인공 프로필"""
+    age_group: Literal["young adult", "middle-aged", "elderly"]
+    gender: Literal["man", "woman"]
+    description: str  # 영문 한 줄 설명
+    appearance: str   # 외모 디테일
+
+
 class EducationalContent(BaseModel):
     """교육 콘텐츠"""
     title: str
@@ -58,5 +66,6 @@ class ScenarioTree(BaseModel):
     difficulty: Literal["easy", "medium", "hard"]
     root_node_id: str
     nodes: dict[str, ScenarioNode]
+    protagonist: ProtagonistProfile | None = None
     created_at: datetime
     metadata: dict = Field(default_factory=dict)

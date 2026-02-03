@@ -50,7 +50,17 @@ class ScenarioTreeBuilder:
         try:
             async with asyncio.timeout(settings.pipeline_timeout):
                 # Phase 1: Seed (루트 노드 생성)
-                root = await self._generate_root(phishing_type, difficulty, seed_info)
+                root, protagonist_data = await self._generate_root(phishing_type, difficulty, seed_info)
+
+                # 주인공 프로필 변환
+                from app.models.scenario import ProtagonistProfile
+                protagonist = None
+                if protagonist_data:
+                    try:
+                        protagonist = ProtagonistProfile.model_validate(protagonist_data)
+                        logger.info("주인공 프로필 생성: %s %s", protagonist.age_group, protagonist.gender)
+                    except Exception as e:
+                        logger.warning("주인공 프로필 변환 실패: %s", e)
 
                 tree = ScenarioTree(
                     id=f"scenario_{uuid4().hex[:8]}",
@@ -60,6 +70,7 @@ class ScenarioTreeBuilder:
                     difficulty=difficulty,
                     root_node_id=root.id,
                     nodes={root.id: root},
+                    protagonist=protagonist,
                     created_at=datetime.now(timezone.utc),
                 )
                 logger.info("[Phase 1/5] Seed 완료: choices=%d", len(root.choices))
@@ -102,10 +113,11 @@ class ScenarioTreeBuilder:
         phishing_type: str,
         difficulty: str,
         seed_info: str | None
-    ) -> ScenarioNode:
-        """루트 노드 생성"""
+    ) -> tuple[ScenarioNode, dict | None]:
+        """루트 노드 생성 (주인공 정보 포함)"""
         result = await generate_root_node(phishing_type, difficulty, seed_info)
-        return result_to_node(result, self._next_node_id(), depth=0)
+        node = result_to_node(result, self._next_node_id(), depth=0)
+        return node, result.protagonist
 
     async def _expand_level(
         self,
@@ -181,6 +193,7 @@ class ScenarioTreeBuilder:
                 should_end=end_signal.should_end,
                 force_end=end_signal.force,
                 ending_type_hint=end_signal.ending_type,
+                protagonist=tree.protagonist,
             )
 
             result = await generate_node(context)
@@ -283,16 +296,37 @@ class ScenarioTreeBuilder:
                     node.educational_content = content
 
     async def _generate_images(self, tree: ScenarioTree):
-        """주요 노드(루트, 엔딩)에 이미지 생성"""
-        tasks = []
+        """모든 노드에 이미지 생성 (배치 처리)"""
+        nodes_to_generate = [
+            node for node in tree.nodes.values()
+            if node.image_prompt and not node.image_url
+        ]
 
-        for node in tree.nodes.values():
-            # 루트 노드 또는 엔딩 노드에만 이미지 생성
-            if node.image_prompt and not node.image_url:
-                if node.depth == 0 or node.type.startswith("ending_"):
-                    tasks.append(self._generate_single_image(node, tree.id))
+        if not nodes_to_generate:
+            return
 
-        await asyncio.gather(*tasks, return_exceptions=True)
+        total = len(nodes_to_generate)
+        logger.info(f"이미지 생성 시작: {total}개 노드")
+
+        # 배치 처리
+        batch_size = settings.image_batch_size
+        for i in range(0, total, batch_size):
+            batch = nodes_to_generate[i:i + batch_size]
+            batch_num = i // batch_size + 1
+            total_batches = (total + batch_size - 1) // batch_size
+
+            logger.info(f"배치 {batch_num}/{total_batches}: {len(batch)}개 이미지 생성 중...")
+
+            # 배치 내 병렬 생성
+            tasks = [self._generate_single_image(node, tree.id) for node in batch]
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+            # 다음 배치 전 대기
+            if i + batch_size < total:
+                logger.info(f"다음 배치 전 {settings.image_batch_wait}초 대기...")
+                await asyncio.sleep(settings.image_batch_wait)
+
+        logger.info(f"이미지 생성 완료: {total}개 노드")
 
     async def _generate_single_image(self, node: ScenarioNode, scenario_id: str):
         """단일 노드에 이미지 생성"""
