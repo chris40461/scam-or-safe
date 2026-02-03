@@ -8,7 +8,7 @@ import litellm
 from app.config import settings
 
 logger = logging.getLogger("pipeline.node_generator")
-from app.models.scenario import Resources, ResourceDelta, ScenarioNode, Choice
+from app.models.scenario import Resources, ResourceDelta, ScenarioNode, Choice, ProtagonistProfile
 from app.pipeline.prompts import (
     ROOT_SYSTEM_PROMPT,
     NODE_SYSTEM_PROMPT,
@@ -26,6 +26,7 @@ class ChoiceResult(BaseModel):
 
 class GenerationResult(BaseModel):
     """LLM이 생성한 노드"""
+    protagonist: dict | None = None  # 루트 노드에서만 생성
     node_type: str
     narrative_text: str
     choices: list[ChoiceResult]
@@ -45,6 +46,7 @@ class GenerationContext(BaseModel):
     should_end: bool
     force_end: bool
     ending_type_hint: str | None = None
+    protagonist: ProtagonistProfile | None = None
 
 
 def infer_ending_from_hint(ending_type_hint: str | None) -> str:
@@ -90,7 +92,7 @@ async def generate_root_node(
                         ChoiceResult(text="응답한다", is_dangerous=True, resource_effect={"trust": 1, "money": 0, "awareness": 0}),
                         ChoiceResult(text="무시한다", is_dangerous=False, resource_effect={"trust": -1, "money": 0, "awareness": 1}),
                     ],
-                    image_prompt="A person in a modern Korean apartment receiving a suspicious phone call, tense atmosphere, dark lighting, webtoon style illustration",
+                    image_prompt="A middle-aged Korean person in casual home clothes, receiving a suspicious phone call, tense atmosphere, modern Korean apartment living room, dark lighting, webtoon style illustration",
                     reasoning=f"LLM 호출 실패로 폴백 노드 생성: {str(e)}"
                 )
             # 지수 백오프: 1s, 2s, 4s
@@ -112,6 +114,7 @@ async def generate_node(context: GenerationContext) -> GenerationResult:
         should_end=context.should_end,
         force_end=context.force_end,
         ending_type_hint=context.ending_type_hint,
+        protagonist=context.protagonist,
     )
 
     for attempt in range(settings.retry_count + 1):
@@ -141,10 +144,15 @@ async def generate_node(context: GenerationContext) -> GenerationResult:
                 # 폴백: 강제 종료가 필요하거나 최대 깊이에 도달한 경우에만 엔딩 노드 생성
                 if context.force_end or context.current_depth >= context.max_depth - 1:
                     ending_type = infer_ending_from_hint(context.ending_type_hint)
+                    # 주인공 정보를 폴백 이미지 프롬프트에 포함
+                    if context.protagonist:
+                        protagonist_desc = f"{context.protagonist.description}, {context.protagonist.appearance}"
+                    else:
+                        protagonist_desc = "A middle-aged Korean person in casual clothes"
                     image_prompt = (
-                        "A relieved person realizing they avoided a scam, bright lighting, hopeful atmosphere, Korean urban setting, webtoon style"
+                        f"{protagonist_desc}, relieved expression, sitting at home, bright lighting, hopeful atmosphere, Korean apartment setting, webtoon style illustration"
                         if ending_type == "good"
-                        else "A distressed person realizing they fell victim to a scam, dark atmosphere, regret and despair, Korean urban setting, webtoon style"
+                        else f"{protagonist_desc}, devastated expression, head in hands, dark atmosphere, regret and despair, Korean apartment setting, webtoon style illustration"
                     )
                     return GenerationResult(
                         node_type=f"ending_{ending_type}",
@@ -156,6 +164,11 @@ async def generate_node(context: GenerationContext) -> GenerationResult:
 
                 # 폴백: 내러티브 노드 (계속 진행 가능)
                 logger.warning("노드 생성 실패, 폴백 내러티브 (depth=%d): %s", context.current_depth, str(e)[:100])
+                # 주인공 정보를 폴백 이미지 프롬프트에 포함
+                if context.protagonist:
+                    protagonist_desc = f"{context.protagonist.description}, {context.protagonist.appearance}"
+                else:
+                    protagonist_desc = "A middle-aged Korean person in casual clothes"
                 return GenerationResult(
                     node_type="narrative",
                     narrative_text="상황이 계속되고 있습니다. 어떻게 대응하시겠습니까?",
@@ -171,7 +184,7 @@ async def generate_node(context: GenerationContext) -> GenerationResult:
                             resource_effect={"trust": 1, "money": -1, "awareness": 0}
                         ),
                     ],
-                    image_prompt="A person contemplating a decision, modern Korean setting, tense atmosphere, webtoon style illustration",
+                    image_prompt=f"{protagonist_desc}, contemplating a decision, worried expression, modern Korean setting, tense atmosphere, webtoon style illustration",
                     reasoning=f"LLM 호출 실패로 폴백 내러티브 노드 생성 (트리 확장 계속): {str(e)}"
                 )
             # 지수 백오프: 1s, 2s, 4s
