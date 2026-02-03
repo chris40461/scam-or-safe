@@ -50,11 +50,16 @@ export function processChoice(
   const choice = currentNode.choices.find((c) => c.id === choiceId);
 
   if (!choice) {
-    throw new Error(`Choice not found: ${choiceId}`);
+    const availableChoiceIds = currentNode.choices.map(c => c.id).join(", ");
+    throw new Error(
+      `Choice not found: ${choiceId}. Available choices in node ${currentNode.id}: [${availableChoiceIds}]`
+    );
   }
 
   if (!choice.next_node_id) {
-    throw new Error(`Choice has no next node: ${choiceId}`);
+    throw new Error(
+      `Choice has no next node: ${choiceId} in node ${currentNode.id}`
+    );
   }
 
   // 자원 변동 적용
@@ -86,6 +91,30 @@ export function processChoice(
   };
 
   newSession.isFinished = isFinished(newSession);
+  return newSession;
+}
+
+/** 마지막 선택 취소 */
+export function undoLastChoice(session: GameSession): GameSession | null {
+  if (session.choiceHistory.length === 0) {
+    return null; // 되돌릴 선택이 없음
+  }
+
+  // 새로운 히스토리
+  const newHistory = session.choiceHistory.slice(0, -1);
+
+  // 처음부터 다시 시작
+  let newSession = createSession(session.scenarioTree);
+
+  // 원래 세션 정보 유지
+  newSession.id = session.id;
+  newSession.startedAt = session.startedAt;
+
+  // 이전 선택들을 다시 적용
+  for (const item of newHistory) {
+    newSession = processChoice(newSession, item.choiceId);
+  }
+
   return newSession;
 }
 

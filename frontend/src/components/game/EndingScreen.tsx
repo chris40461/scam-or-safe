@@ -7,12 +7,14 @@ interface EndingScreenProps {
   result: GameResult;
   onReplay: () => void;
   onSelectOther: () => void;
+  onGoBack?: () => void;
 }
 
 export function EndingScreen({
   result,
   onReplay,
   onSelectOther,
+  onGoBack,
 }: EndingScreenProps) {
   const isGood = result.ending === "good";
 
@@ -127,18 +129,29 @@ export function EndingScreen({
       )}
 
       {/* 버튼 */}
-      <div className="flex gap-4 w-full max-w-md">
+      <div className="grid grid-cols-3 gap-3 w-full max-w-md">
+        {onGoBack && (
+          <button
+            onClick={onGoBack}
+            className="group flex flex-col items-center justify-center py-3 px-2 bg-gradient-to-br from-slate-600 to-slate-700 hover:from-slate-500 hover:to-slate-600 text-white font-semibold rounded-lg transition-all duration-300 hover:scale-105 shadow-lg hover:shadow-slate-500/50"
+          >
+            <span className="text-xl mb-1 transition-transform duration-300 group-hover:-translate-x-1">←</span>
+            <span className="text-xs sm:text-sm">이전 선택</span>
+          </button>
+        )}
         <button
           onClick={onReplay}
-          className="flex-1 py-3 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-lg transition-colors"
+          className="group flex flex-col items-center justify-center py-3 px-2 bg-gradient-to-br from-cyan-600 to-cyan-700 hover:from-cyan-500 hover:to-cyan-600 text-white font-semibold rounded-lg transition-all duration-300 hover:scale-105 shadow-lg hover:shadow-cyan-500/50"
         >
-          다시 플레이
+          <span className="text-xl mb-1 transition-transform duration-300 group-hover:rotate-180">↻</span>
+          <span className="text-xs sm:text-sm">다시 플레이</span>
         </button>
         <button
           onClick={onSelectOther}
-          className="flex-1 py-3 bg-gray-600 hover:bg-gray-700 text-white font-semibold rounded-lg transition-colors"
+          className="group flex flex-col items-center justify-center py-3 px-2 bg-gradient-to-br from-teal-600 to-teal-700 hover:from-teal-500 hover:to-teal-600 text-white font-semibold rounded-lg transition-all duration-300 hover:scale-105 shadow-lg hover:shadow-teal-500/50"
         >
-          다른 시나리오
+          <span className="text-xl mb-1 transition-transform duration-300 group-hover:translate-x-1">→</span>
+          <span className="text-xs sm:text-sm">다른 시나리오</span>
         </button>
       </div>
     </motion.div>

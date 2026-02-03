@@ -26,6 +26,7 @@ export function GameContainer({ scenarioId }: GameContainerProps) {
     educationalContent,
     startGame,
     makeChoice,
+    undoChoice,
     setTypingComplete,
     dismissPopup,
     reset,
@@ -36,7 +37,8 @@ export function GameContainer({ scenarioId }: GameContainerProps) {
   useEffect(() => {
     startGame(scenarioId);
     return () => reset();
-  }, [scenarioId, startGame, reset]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scenarioId]);
 
   // 로딩 상태
   if (isLoading && !session) {
@@ -76,11 +78,15 @@ export function GameContainer({ scenarioId }: GameContainerProps) {
   if (session.isFinished) {
     const result = getResult();
     if (result) {
+      // 선택 이력이 있는 경우에만 이전 선택지 버튼 표시
+      const hasHistory = session.choiceHistory.length > 0;
+
       return (
         <EndingScreen
           result={result}
           onReplay={() => startGame(scenarioId)}
           onSelectOther={() => router.push("/game")}
+          onGoBack={hasHistory ? undoChoice : undefined}
         />
       );
     }

@@ -24,6 +24,7 @@ interface GameStore {
   // 액션
   startGame: (scenarioId: string) => Promise<void>;
   makeChoice: (choiceId: string) => Promise<void>;
+  undoChoice: () => Promise<void>;
   setTypingComplete: (complete: boolean) => void;
   dismissPopup: () => void;
   clearError: () => void;
@@ -104,6 +105,37 @@ export const useGameStore = create<GameStore>((set, get) => ({
           educationalContent,
         });
       }
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : "Unknown error",
+        isLoading: false,
+      });
+    }
+  },
+
+  undoChoice: async () => {
+    const { session } = get();
+    if (!session) return;
+
+    set({ isLoading: true, error: null, isTypingComplete: false });
+    try {
+      const res = await fetch(`/api/game/${session.id}/undo`, {
+        method: "POST",
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to undo choice");
+      }
+
+      const { session: newSession } = await res.json();
+      const currentNode = getCurrentNode(newSession);
+
+      set({
+        session: newSession,
+        currentNode,
+        isLoading: false,
+        previousResources: null,
+      });
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : "Unknown error",
