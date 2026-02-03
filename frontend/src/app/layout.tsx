@@ -9,7 +9,7 @@ const notoSansKR = Noto_Sans_KR({
 });
 
 export const metadata: Metadata = {
-  title: "PhishGuard - 피싱 예방 체험 게임",
+  title: "SOS - Scam Or Safe",
   description: "실제 피싱 사례를 기반으로 한 체험형 교육 게임",
 };
 
