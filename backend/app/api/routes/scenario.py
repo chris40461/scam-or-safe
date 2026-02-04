@@ -197,8 +197,9 @@ async def regenerate_failed_images(
 
 
 async def _run_image_regeneration(task_id: str, scenario_id: str):
-    """백그라운드에서 실패한 이미지 재생성"""
+    """백그라운드에서 실패한 이미지 재생성 (배치 병렬 처리)"""
     from app.core.image_generator import generate_image
+    from app.config import settings
     
     try:
         generation_tasks[task_id]["status"] = "regenerating"
@@ -214,32 +215,48 @@ async def _run_image_regeneration(task_id: str, scenario_id: str):
             if node.image_prompt and not node.image_url
         ]
         
+        total = len(failed_nodes)
         success_count = 0
-        for i, (node_id, node) in enumerate(failed_nodes):
-            logger.info(f"재생성 [{i+1}/{len(failed_nodes)}]: {node_id}")
+        batch_size = settings.image_batch_size  # 기본 25개
+        
+        # 배치 병렬 처리
+        for i in range(0, total, batch_size):
+            batch = failed_nodes[i:i + batch_size]
+            batch_num = i // batch_size + 1
+            total_batches = (total + batch_size - 1) // batch_size
             
-            url = await generate_image(node.image_prompt, node_id, scenario_id)
-            if url:
-                node.image_url = url
-                success_count += 1
-                logger.info(f"재생성 성공: {node_id}")
-            else:
-                logger.warning(f"재생성 실패: {node_id}")
+            logger.info(f"재생성 배치 {batch_num}/{total_batches}: {len(batch)}개 처리 중...")
             
-            # 각 요청 사이에 대기
-            if i < len(failed_nodes) - 1:
-                await asyncio.sleep(2.0)
+            # 배치 내 병렬 생성
+            async def generate_single(node_id: str, node):
+                url = await generate_image(node.image_prompt, node_id, scenario_id)
+                if url:
+                    node.image_url = url
+                    return True
+                return False
+            
+            tasks = [generate_single(node_id, node) for node_id, node in batch]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            batch_success = sum(1 for r in results if r is True)
+            success_count += batch_success
+            logger.info(f"배치 {batch_num} 완료: {batch_success}/{len(batch)} 성공")
+            
+            # 다음 배치 전 대기 (API 할당량 관리)
+            if i + batch_size < total:
+                await asyncio.sleep(settings.image_batch_wait)
         
         # 시나리오 저장
         _save_scenario(scenario)
         
         generation_tasks[task_id]["status"] = "completed"
         generation_tasks[task_id]["success_count"] = success_count
-        generation_tasks[task_id]["total_attempted"] = len(failed_nodes)
-        logger.info(f"이미지 재생성 완료: {success_count}/{len(failed_nodes)} 성공")
+        generation_tasks[task_id]["total_attempted"] = total
+        logger.info(f"이미지 재생성 완료: {success_count}/{total} 성공")
         
     except Exception as e:
         generation_tasks[task_id]["status"] = "failed"
         generation_tasks[task_id]["error"] = str(e)
         logger.error(f"이미지 재생성 실패: {e}")
+
 
