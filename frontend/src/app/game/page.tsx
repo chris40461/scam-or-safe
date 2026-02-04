@@ -83,10 +83,21 @@ export default async function ScenarioSelectPage() {
           >
             ← 홈으로
           </Link>
-          <h1 className="text-3xl font-bold text-cyan-400">시나리오 선택</h1>
-          <p className="text-gray-400 mt-2">
-            체험할 피싱 시나리오를 선택하세요
-          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-cyan-400">시나리오 선택</h1>
+              <p className="text-gray-400 mt-2">
+                체험할 피싱 시나리오를 선택하세요
+              </p>
+            </div>
+            <Link
+              href="/generate"
+              className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-lg transition-colors flex items-center gap-2"
+            >
+              <span>✨</span>
+              새 시나리오 만들기
+            </Link>
+          </div>
         </div>
 
         {/* 에러 상태 */}

@@ -27,6 +27,7 @@ class ChoiceResult(BaseModel):
 class GenerationResult(BaseModel):
     """LLM이 생성한 노드"""
     protagonist: dict | None = None  # 루트 노드에서만 생성
+    prologue: str | None = None  # 루트 노드에서만 생성 (이전 상황 설명)
     node_type: str
     narrative_text: str
     choices: list[ChoiceResult]
