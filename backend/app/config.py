@@ -23,12 +23,12 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:3000"]
 
     # 파이프라인 설정
-    max_depth: int = 3
+    max_depth: int = 5
     max_choices: int = 3
     semaphore_limit: int = 10
     retry_count: int = 3
     llm_timeout: int = 60
-    pipeline_timeout: int = 600
+    pipeline_timeout: int = 3000
 
     # 이미지 생성 설정 (Imagen 4.0 Fast: 분당 150 요청 제한)
     image_max_concurrent: int = 10  # 병렬 처리 수 (10개 동시)
