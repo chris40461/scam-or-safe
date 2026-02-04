@@ -301,7 +301,12 @@ class ScenarioTreeBuilder:
                     node.educational_content = content
 
     async def _generate_images(self, tree: ScenarioTree):
-        """모든 노드에 이미지 생성 (배치 처리)"""
+        """
+        모든 노드에 이미지 생성 (배치 처리 + 실패 시 재시도)
+        
+        1차 시도: 모든 노드를 배치로 처리
+        2차 시도: 실패한 노드만 순차적으로 재시도 (더 긴 대기시간)
+        """
         nodes_to_generate = [
             node for node in tree.nodes.values()
             if node.image_prompt and not node.image_url
@@ -313,17 +318,63 @@ class ScenarioTreeBuilder:
         total = len(nodes_to_generate)
         logger.info(f"이미지 생성 시작: {total}개 노드")
 
-        # 배치 처리
+        # 1차 시도: 배치 병렬 처리
+        await self._generate_images_batch(nodes_to_generate, tree.id, "1차")
+
+        # 실패한 노드 확인
+        failed_nodes = [node for node in nodes_to_generate if not node.image_url]
+        success_count = total - len(failed_nodes)
+        
+        if failed_nodes:
+            logger.warning(f"1차 이미지 생성 결과: {success_count}/{total} 성공, {len(failed_nodes)}개 실패")
+            logger.info(f"실패 노드: {[n.id for n in failed_nodes]}")
+            
+            # 2차 시도: 실패한 노드만 순차 재시도 (더 긴 대기시간)
+            logger.info(f"2차 재시도 시작: {len(failed_nodes)}개 노드 (순차 처리)")
+            await asyncio.sleep(5.0)  # API 안정화 대기
+            
+            for i, node in enumerate(failed_nodes):
+                logger.info(f"재시도 [{i+1}/{len(failed_nodes)}]: {node.id}")
+                await self._generate_single_image(node, tree.id)
+                
+                if node.image_url:
+                    logger.info(f"재시도 성공: {node.id}")
+                else:
+                    logger.error(f"재시도 실패: {node.id}")
+                
+                # 순차 처리 시 충분한 대기
+                if i < len(failed_nodes) - 1:
+                    await asyncio.sleep(2.0)
+            
+            # 최종 결과
+            final_failed = [node for node in nodes_to_generate if not node.image_url]
+            final_success = total - len(final_failed)
+            logger.info(f"최종 이미지 생성 결과: {final_success}/{total} 성공")
+            
+            if final_failed:
+                logger.warning(f"최종 실패 노드: {[n.id for n in final_failed]}")
+        else:
+            logger.info(f"이미지 생성 완료: {success_count}/{total} 성공 (모두 성공)")
+
+    async def _generate_images_batch(
+        self,
+        nodes: list[ScenarioNode],
+        scenario_id: str,
+        pass_name: str
+    ):
+        """배치 단위로 이미지 생성"""
+        total = len(nodes)
         batch_size = settings.image_batch_size
+        
         for i in range(0, total, batch_size):
-            batch = nodes_to_generate[i:i + batch_size]
+            batch = nodes[i:i + batch_size]
             batch_num = i // batch_size + 1
             total_batches = (total + batch_size - 1) // batch_size
 
-            logger.info(f"배치 {batch_num}/{total_batches}: {len(batch)}개 이미지 생성 중...")
+            logger.info(f"{pass_name} 배치 {batch_num}/{total_batches}: {len(batch)}개 이미지 생성 중...")
 
             # 배치 내 병렬 생성
-            tasks = [self._generate_single_image(node, tree.id) for node in batch]
+            tasks = [self._generate_single_image(node, scenario_id) for node in batch]
             await asyncio.gather(*tasks, return_exceptions=True)
 
             # 다음 배치 전 대기
@@ -331,15 +382,16 @@ class ScenarioTreeBuilder:
                 logger.info(f"다음 배치 전 {settings.image_batch_wait}초 대기...")
                 await asyncio.sleep(settings.image_batch_wait)
 
-        logger.info(f"이미지 생성 완료: {total}개 노드")
-
     async def _generate_single_image(self, node: ScenarioNode, scenario_id: str):
         """단일 노드에 이미지 생성"""
         async with self.semaphore:
             if node.image_prompt:
-                url = await generate_image(node.image_prompt, node.id, scenario_id)
-                if url:
-                    node.image_url = url
+                try:
+                    url = await generate_image(node.image_prompt, node.id, scenario_id)
+                    if url:
+                        node.image_url = url
+                except Exception as e:
+                    logger.error(f"[{node.id}] 이미지 생성 예외: {e}")
 
     def _save_progress(self, tree: ScenarioTree, phase: str):
         """파이프라인 진행 상황을 JSON으로 중간 저장"""
