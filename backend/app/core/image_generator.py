@@ -1,5 +1,6 @@
 """이미지 생성 모듈 (Google Imagen via Vertex AI)"""
 import asyncio
+import logging
 import os
 import time
 from pathlib import Path
@@ -11,13 +12,27 @@ from google.genai import types
 
 from app.config import settings
 
+logger = logging.getLogger("core.image_generator")
 IMAGES_DIR = Path(__file__).parent.parent / "data" / "images"
 
 
-def _generate_image_sync(prompt: str, node_id: str, scenario_id: str | None = None) -> str | None:
-    """동기 이미지 생성 (스레드에서 실행, 지수 백오프 재시도)"""
+def _generate_image_sync(
+    prompt: str,
+    node_id: str,
+    scenario_id: str | None = None,
+    seed: int | None = None
+) -> str | None:
+    """
+    동기 이미지 생성 (스레드에서 실행, 지수 백오프 재시도)
+    
+    Args:
+        prompt: 이미지 생성 프롬프트
+        node_id: 노드 ID
+        scenario_id: 시나리오 ID (파일명 및 seed 생성에 사용)
+        seed: 이미지 생성 seed (동일 seed = 동일 스타일). None이면 scenario_id에서 생성
+    """
     if not settings.gcp_project_id:
-        print("Image generation skipped: GCP_PROJECT_ID not configured")
+        logger.warning("Image generation skipped: GCP_PROJECT_ID not configured")
         return None
 
     # 서비스 계정 인증 설정
@@ -26,10 +41,18 @@ def _generate_image_sync(prompt: str, node_id: str, scenario_id: str | None = No
         if creds_path.exists():
             os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(creds_path)
         else:
-            print(f"Credentials file not found: {creds_path}")
+            logger.error(f"Credentials file not found: {creds_path}")
             return None
 
     IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+
+    # seed 계산: 시나리오별로 고정된 seed 사용 (인물 일관성 보장)
+    if seed is None and scenario_id:
+        # scenario_id의 해시값을 seed로 사용 (1 ~ 2^31-1 범위)
+        seed = hash(scenario_id) % 2147483647
+        if seed <= 0:
+            seed = abs(seed) + 1
+        logger.debug(f"[{node_id}] Using seed={seed} for scenario {scenario_id}")
 
     max_retries = settings.image_retry_count
     base_delay = settings.image_retry_delay
@@ -43,18 +66,24 @@ def _generate_image_sync(prompt: str, node_id: str, scenario_id: str | None = No
                 location=settings.gcp_location,
             )
 
+            # seed 사용 시 add_watermark=False, enhance_prompt=False 필수
+            config = types.GenerateImagesConfig(
+                number_of_images=1,
+                aspect_ratio="16:9",
+                person_generation="ALLOW_ADULT",
+                seed=seed,
+                add_watermark=False,
+                enhance_prompt=False,
+            )
+
             response = client.models.generate_images(
                 model=settings.image_model,
                 prompt=prompt,
-                config=types.GenerateImagesConfig(
-                    number_of_images=1,
-                    aspect_ratio="16:9",
-                    person_generation="ALLOW_ADULT",
-                ),
+                config=config,
             )
 
             if not response.generated_images:
-                print(f"[{node_id}] Image generation returned no images")
+                logger.warning(f"[{node_id}] Image generation returned no images")
                 return None
 
             # 이미지 저장 (파일명: {scenario_id}_{node_id}.png)
@@ -67,13 +96,19 @@ def _generate_image_sync(prompt: str, node_id: str, scenario_id: str | None = No
 
             # PIL Image를 파일로 저장
             image.save(str(filepath))
-            print(f"[{node_id}] Image saved: {filepath}")
+            logger.info(f"[{node_id}] Image saved: {filepath.name}")
 
             return f"/api/v1/images/{filename}"
 
         except Exception as e:
             error_str = str(e)
             is_quota_error = "RESOURCE_EXHAUSTED" in error_str or "429" in error_str
+            is_safety_error = "SAFETY" in error_str or "blocked" in error_str.lower()
+
+            if is_safety_error:
+                # 안전 필터 차단은 재시도해도 동일하므로 즉시 실패 처리
+                logger.warning(f"[{node_id}] Image blocked by safety filter, skipping")
+                return None
 
             if attempt < max_retries:
                 # 지수 백오프: 2s, 4s, 8s
@@ -81,20 +116,35 @@ def _generate_image_sync(prompt: str, node_id: str, scenario_id: str | None = No
                 if is_quota_error:
                     # 할당량 초과 시 추가 대기
                     delay = delay * 2
-                print(f"[{node_id}] Attempt {attempt + 1} failed: {e}. Retrying in {delay:.1f}s...")
+                    logger.warning(f"[{node_id}] Quota exhausted, waiting {delay:.1f}s...")
+                else:
+                    logger.warning(f"[{node_id}] Attempt {attempt + 1}/{max_retries + 1} failed: {e}")
                 time.sleep(delay)
             else:
-                print(f"[{node_id}] Image generation failed after {max_retries + 1} attempts: {e}")
+                logger.error(f"[{node_id}] Image generation failed after {max_retries + 1} attempts: {e}")
                 return None
 
     return None
 
 
-async def generate_image(prompt: str, node_id: str, scenario_id: str | None = None) -> str | None:
-    """비동기 이미지 생성 (스레드풀 사용)"""
+async def generate_image(
+    prompt: str,
+    node_id: str,
+    scenario_id: str | None = None,
+    seed: int | None = None
+) -> str | None:
+    """
+    비동기 이미지 생성 (스레드풀 사용)
+    
+    Args:
+        prompt: 이미지 생성 프롬프트
+        node_id: 노드 ID
+        scenario_id: 시나리오 ID (파일명 및 seed 생성에 사용)
+        seed: 이미지 생성 seed (동일 seed = 동일 스타일)
+    """
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(
-        None, partial(_generate_image_sync, prompt, node_id, scenario_id)
+        None, partial(_generate_image_sync, prompt, node_id, scenario_id, seed)
     )
 
 
