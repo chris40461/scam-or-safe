@@ -145,3 +145,101 @@ async def get_generation_status(scenario_id: str) -> dict:
 
     task = generation_tasks[scenario_id]
     return task
+
+
+@router.post("/{scenario_id}/regenerate-images")
+async def regenerate_failed_images(
+    scenario_id: str,
+    background_tasks: BackgroundTasks
+) -> dict:
+    """
+    실패한 이미지만 재생성
+    
+    image_url이 null인 노드만 대상으로 이미지를 다시 생성합니다.
+    """
+    # 시나리오 로드
+    scenario_file = SCENARIOS_DIR / f"{scenario_id}.json"
+    if not scenario_file.exists():
+        raise HTTPException(status_code=404, detail="Scenario not found")
+    
+    scenario = _load_scenario(scenario_file)
+    
+    # 실패한 노드 확인
+    failed_nodes = [
+        node_id for node_id, node in scenario.nodes.items()
+        if node.image_prompt and not node.image_url
+    ]
+    
+    if not failed_nodes:
+        return {
+            "status": "no_failures",
+            "message": "모든 이미지가 이미 생성되어 있습니다.",
+            "total_nodes": len(scenario.nodes),
+            "failed_count": 0
+        }
+    
+    task_id = f"regen_{uuid4().hex[:8]}"
+    generation_tasks[task_id] = {
+        "status": "pending",
+        "scenario_id": scenario_id,
+        "failed_count": len(failed_nodes),
+        "failed_nodes": failed_nodes,
+    }
+    
+    background_tasks.add_task(_run_image_regeneration, task_id, scenario_id)
+    
+    return {
+        "task_id": task_id,
+        "status": "started",
+        "failed_count": len(failed_nodes),
+        "failed_nodes": failed_nodes
+    }
+
+
+async def _run_image_regeneration(task_id: str, scenario_id: str):
+    """백그라운드에서 실패한 이미지 재생성"""
+    from app.core.image_generator import generate_image
+    
+    try:
+        generation_tasks[task_id]["status"] = "regenerating"
+        logger.info(f"이미지 재생성 시작: scenario={scenario_id}")
+        
+        # 시나리오 로드
+        scenario_file = SCENARIOS_DIR / f"{scenario_id}.json"
+        scenario = _load_scenario(scenario_file)
+        
+        # 실패한 노드 추출
+        failed_nodes = [
+            (node_id, node) for node_id, node in scenario.nodes.items()
+            if node.image_prompt and not node.image_url
+        ]
+        
+        success_count = 0
+        for i, (node_id, node) in enumerate(failed_nodes):
+            logger.info(f"재생성 [{i+1}/{len(failed_nodes)}]: {node_id}")
+            
+            url = await generate_image(node.image_prompt, node_id, scenario_id)
+            if url:
+                node.image_url = url
+                success_count += 1
+                logger.info(f"재생성 성공: {node_id}")
+            else:
+                logger.warning(f"재생성 실패: {node_id}")
+            
+            # 각 요청 사이에 대기
+            if i < len(failed_nodes) - 1:
+                await asyncio.sleep(2.0)
+        
+        # 시나리오 저장
+        _save_scenario(scenario)
+        
+        generation_tasks[task_id]["status"] = "completed"
+        generation_tasks[task_id]["success_count"] = success_count
+        generation_tasks[task_id]["total_attempted"] = len(failed_nodes)
+        logger.info(f"이미지 재생성 완료: {success_count}/{len(failed_nodes)} 성공")
+        
+    except Exception as e:
+        generation_tasks[task_id]["status"] = "failed"
+        generation_tasks[task_id]["error"] = str(e)
+        logger.error(f"이미지 재생성 실패: {e}")
+
