@@ -86,19 +86,25 @@ def _generate_image_sync(
                 logger.warning(f"[{node_id}] Image generation returned no images")
                 return None
 
-            # 이미지 저장 (파일명: {scenario_id}_{node_id}.png)
+            # 이미지 저장 (경로: images/{scenario_id}/{node_id}.png)
             image = response.generated_images[0].image
             if scenario_id:
-                filename = f"{scenario_id}_{node_id}.png"
+                # 시나리오별 폴더 생성
+                scenario_dir = IMAGES_DIR / scenario_id
+                scenario_dir.mkdir(parents=True, exist_ok=True)
+                filename = f"{node_id}.png"
+                filepath = scenario_dir / filename
+                url_path = f"/api/v1/images/{scenario_id}/{filename}"
             else:
                 filename = f"{node_id}_{uuid4().hex[:8]}.png"
-            filepath = IMAGES_DIR / filename
+                filepath = IMAGES_DIR / filename
+                url_path = f"/api/v1/images/{filename}"
 
             # PIL Image를 파일로 저장
             image.save(str(filepath))
-            logger.info(f"[{node_id}] Image saved: {filepath.name}")
+            logger.info(f"[{node_id}] Image saved: {filepath}")
 
-            return f"/api/v1/images/{filename}"
+            return url_path
 
         except Exception as e:
             error_str = str(e)
