@@ -43,11 +43,15 @@ export function EndingScreen({
 
       {/* 엔딩 서사 */}
       <div className="w-full max-w-md bg-surface-secondary/60 rounded-lg p-5 border border-gray-700">
-        {result.endingImageUrl && (
+        {result.endingImageUrl && result.endingImageUrl.trim() !== "" && (
           <img
             src={result.endingImageUrl}
             alt="엔딩 장면"
             className="w-full rounded-lg mb-4 object-cover max-h-48"
+            onError={(e) => {
+              // 이미지 로드 실패 시 이미지 요소 숨기기
+              (e.target as HTMLImageElement).style.display = "none";
+            }}
           />
         )}
         <p className="text-gray-200 leading-relaxed whitespace-pre-line">
