@@ -34,6 +34,13 @@ class EducationalContent(BaseModel):
     warning_signs: list[str]
 
 
+class DangerFeedback(BaseModel):
+    """위험한 선택에 대한 교육적 피드백"""
+    why_dangerous: str          # 왜 위험한지 설명
+    warning_signs: list[str]    # 놓친 경고 신호들
+    safe_alternative: str       # 더 안전한 대안 설명
+
+
 class Choice(BaseModel):
     """선택지"""
     id: str
@@ -41,6 +48,7 @@ class Choice(BaseModel):
     next_node_id: str | None = None
     is_dangerous: bool = False
     resource_effect: ResourceDelta = Field(default_factory=ResourceDelta)
+    danger_feedback: DangerFeedback | None = None  # 위험 선택 피드백
 
 
 class ScenarioNode(BaseModel):

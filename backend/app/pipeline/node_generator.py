@@ -8,7 +8,7 @@ import litellm
 from app.config import settings
 
 logger = logging.getLogger("pipeline.node_generator")
-from app.models.scenario import Resources, ResourceDelta, ScenarioNode, Choice, ProtagonistProfile
+from app.models.scenario import Resources, ResourceDelta, ScenarioNode, Choice, ProtagonistProfile, DangerFeedback
 from app.pipeline.prompts import (
     ROOT_SYSTEM_PROMPT,
     NODE_SYSTEM_PROMPT,
@@ -22,6 +22,7 @@ class ChoiceResult(BaseModel):
     text: str
     is_dangerous: bool
     resource_effect: dict[str, int]
+    danger_feedback: dict | None = None  # 위험한 선택인 경우 피드백
 
 
 class GenerationResult(BaseModel):
@@ -205,6 +206,10 @@ def result_to_node(
     choices = []
     for i, choice_result in enumerate(result.choices):
         choice_id = f"{node_id}_c{i+1}"
+        # 위험 선택 피드백 변환
+        feedback = None
+        if choice_result.is_dangerous and choice_result.danger_feedback:
+            feedback = DangerFeedback.model_validate(choice_result.danger_feedback)
         choices.append(Choice(
             id=choice_id,
             text=choice_result.text,
@@ -214,6 +219,7 @@ def result_to_node(
                 money=max(-2, min(2, choice_result.resource_effect.get("money", 0))),
                 awareness=max(-2, min(2, choice_result.resource_effect.get("awareness", 0))),
             ),
+            danger_feedback=feedback,
         ))
 
     return ScenarioNode(

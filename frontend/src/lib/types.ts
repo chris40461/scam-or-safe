@@ -28,6 +28,13 @@ export interface EducationalContent {
   warning_signs: string[];
 }
 
+/** 위험 선택 피드백 */
+export interface DangerFeedback {
+  why_dangerous: string;
+  warning_signs: string[];
+  safe_alternative: string;
+}
+
 /** 선택지 */
 export interface Choice {
   id: string;
@@ -35,6 +42,7 @@ export interface Choice {
   next_node_id: string | null;
   is_dangerous: boolean;
   resource_effect: ResourceDelta;
+  danger_feedback?: DangerFeedback;  // 위험 선택 피드백 (is_dangerous=true인 경우만)
 }
 
 /** 시나리오 노드 */
@@ -82,6 +90,7 @@ export interface ChoiceHistoryItem {
   choiceId: string;
   choiceText: string;
   isDangerous: boolean;
+  dangerFeedback?: DangerFeedback;  // 위험 선택 피드백
 }
 
 /** 게임 세션 */

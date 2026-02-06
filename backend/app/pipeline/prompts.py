@@ -47,6 +47,14 @@ ROOT_SYSTEM_PROMPT = f"""당신은 피싱 예방 교육을 위한 텍스트 어�
 - 선택지 텍스트만으로는 어떤 것이 위험한지 명확히 알 수 없어야 함 (실제 피싱 상황처럼)
 - is_dangerous 속성은 내부 로직용으로만 사용 (사용자에게 노출 안 됨)
 - 선택지 텍스트는 1-2문장으로 간결하게
+
+위험 선택 피드백 규칙 (교육용 핵심 콘텐츠):
+- is_dangerous=true인 선택지에만 danger_feedback 필수 포함
+- is_dangerous=false인 선택지는 danger_feedback 생략 (null)
+- danger_feedback 구조:
+  * why_dangerous: 왜 이 선택이 위험한지 구체적 설명 (2-3문장, 사기범의 의도 포함)
+  * warning_signs: 이 상황에서 놓친 경고 신호 2-3개 (배열)
+  * safe_alternative: 같은 상황에서 더 안전한 행동 제안 (1-2문장)
 {IMAGE_PROMPT_GUIDE}"""
 
 NODE_SYSTEM_PROMPT = f"""당신은 피싱 시나리오의 다음 장면을 생성합니다.
@@ -128,13 +136,30 @@ def build_root_prompt(phishing_type: str, difficulty: str, seed_info: str | None
   "choices": [
     {
       "text": "선택지 텍스트",
-      "is_dangerous": true/false,
+      "is_dangerous": true,
+      "resource_effect": {"trust": 0, "money": 0, "awareness": 0},
+      "danger_feedback": {
+        "why_dangerous": "왜 위험한지 구체적 설명 (2-3문장)",
+        "warning_signs": ["경고 신호 1", "경고 신호 2"],
+        "safe_alternative": "더 안전한 행동 제안 (1-2문장)"
+      }
+    },
+    {
+      "text": "안전한 선택지 텍스트",
+      "is_dangerous": false,
       "resource_effect": {"trust": 0, "money": 0, "awareness": 0}
     }
   ],
   "image_prompt": "상세한 영문 이미지 프롬프트 (주인공 설명 포함)",
   "reasoning": "이 장면 설계의 근거"
 }
+
+danger_feedback 작성 지침:
+- is_dangerous=true인 선택지에만 danger_feedback을 포함하세요
+- is_dangerous=false인 선택지에는 danger_feedback을 포함하지 마세요
+- why_dangerous: 사기범의 의도와 피해 가능성을 구체적으로 설명
+- warning_signs: 이 상황에서 알아챌 수 있었던 경고 신호 2-3개
+- safe_alternative: 같은 상황에서 더 안전한 대응 방법
 
 protagonist 생성 지침:
 - 피싱 유형과 상황에 맞는 주인공을 자유롭게 생성하세요.
@@ -228,10 +253,31 @@ choices는 빈 리스트 []로 작성하세요.
 {
   "node_type": "narrative" | "ending_good" | "ending_bad",
   "narrative_text": "2인칭 시점 나레이션 (한국어)",
-  "choices": [{"text": "...", "is_dangerous": true/false, "resource_effect": {"trust": 0, "money": 0, "awareness": 0}}],
+  "choices": [
+    {
+      "text": "위험한 선택지",
+      "is_dangerous": true,
+      "resource_effect": {"trust": 0, "money": 0, "awareness": 0},
+      "danger_feedback": {
+        "why_dangerous": "왜 위험한지 설명 (2-3문장)",
+        "warning_signs": ["경고 신호 1", "경고 신호 2"],
+        "safe_alternative": "안전한 대안 (1-2문장)"
+      }
+    },
+    {
+      "text": "안전한 선택지",
+      "is_dangerous": false,
+      "resource_effect": {"trust": 0, "money": 0, "awareness": 0}
+    }
+  ],
   "image_prompt": "상세한 영문 이미지 프롬프트",
   "reasoning": "이 장면 설계의 근거"
 }
+
+danger_feedback 규칙 (중요):
+- is_dangerous=true인 선택지만 danger_feedback 필수
+- is_dangerous=false인 선택지는 danger_feedback 생략
+- 엔딩 노드(ending_good/ending_bad)의 choices는 빈 배열 []
 """
 
     if protagonist:
