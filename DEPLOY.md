@@ -95,7 +95,7 @@ echo "Frontend URL: $FRONTEND_URL"
 # 백엔드 CORS 설정 업데이트
 gcloud run services update scam-or-safe-backend \
   --region asia-northeast3 \
-  --set-env-vars "CORS_ORIGINS=[\"$FRONTEND_URL\"]"
+  --update-env-vars 'CORS_ORIGINS=["'"$FRONTEND_URL"'"]'
 ```
 
 ## 배포 확인
