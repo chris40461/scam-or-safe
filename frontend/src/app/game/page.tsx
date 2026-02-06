@@ -1,6 +1,11 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { fetchScenarios } from "@/lib/api";
 import type { ScenarioListItem } from "@/lib/types";
+import { useAdminStore } from "@/lib/admin-store";
+import AdminLoginModal from "@/components/admin/AdminLoginModal";
 
 function getDifficultyColor(difficulty: string) {
   switch (difficulty) {
@@ -62,14 +67,35 @@ function ScenarioCard({ scenario }: ScenarioCardProps) {
   );
 }
 
-export default async function ScenarioSelectPage() {
-  let scenarios: ScenarioListItem[] = [];
-  let error: string | null = null;
+export default function ScenarioSelectPage() {
+  const [scenarios, setScenarios] = useState<ScenarioListItem[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
 
-  try {
-    scenarios = await fetchScenarios();
-  } catch (e) {
-    error = e instanceof Error ? e.message : "시나리오를 불러올 수 없습니다";
+  const { isAdmin, isLoading: isAdminLoading } = useAdminStore();
+
+  useEffect(() => {
+    const loadScenarios = async () => {
+      try {
+        const data = await fetchScenarios();
+        setScenarios(data);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "시나리오를 불러올 수 없습니다");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadScenarios();
+  }, []);
+
+  if (isLoading || isAdminLoading) {
+    return (
+      <main className="min-h-screen p-6 flex items-center justify-center">
+        <div className="text-gray-400">로딩 중...</div>
+      </main>
+    );
   }
 
   return (
@@ -90,13 +116,17 @@ export default async function ScenarioSelectPage() {
                 체험할 피싱 시나리오를 선택하세요
               </p>
             </div>
-            <Link
-              href="/generate"
-              className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-lg transition-colors flex items-center gap-2"
-            >
-              <span>✨</span>
-              새 시나리오 만들기
-            </Link>
+
+            {/* 관리자 전용: 새 시나리오 만들기 버튼 */}
+            {isAdmin && (
+              <Link
+                href="/generate"
+                className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-lg transition-colors flex items-center gap-2"
+              >
+                <span>✨</span>
+                새 시나리오 만들기
+              </Link>
+            )}
           </div>
         </div>
 
@@ -104,12 +134,12 @@ export default async function ScenarioSelectPage() {
         {error && (
           <div className="p-6 bg-red-500/10 border border-red-500/30 rounded-lg text-center">
             <p className="text-red-400 mb-4">{error}</p>
-            <Link
-              href="/game"
+            <button
+              onClick={() => window.location.reload()}
               className="inline-block px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg"
             >
               다시 시도
-            </Link>
+            </button>
           </div>
         )}
 
@@ -134,7 +164,24 @@ export default async function ScenarioSelectPage() {
             ))}
           </div>
         )}
+
+        {/* 하단 관리자 로그인 링크 (비관리자만 표시) */}
+        {!isAdmin && (
+          <div className="mt-8 text-center">
+            <button
+              onClick={() => setIsLoginModalOpen(true)}
+              className="text-sm text-gray-500 hover:text-gray-300 underline underline-offset-2 transition-colors"
+            >
+              관리자로 로그인
+            </button>
+          </div>
+        )}
       </div>
+
+      <AdminLoginModal
+        isOpen={isLoginModalOpen}
+        onClose={() => setIsLoginModalOpen(false)}
+      />
     </main>
   );
 }

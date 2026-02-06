@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   startCrawling,
   getCrawlerStatus,
@@ -9,10 +10,14 @@ import {
   generateFromArticle,
   type PhishingArticle,
 } from "@/lib/api";
+import { useAdminStore } from "@/lib/admin-store";
 
 type Step = "idle" | "crawling" | "selecting" | "generating" | "complete";
 
 export default function GeneratePage() {
+  const router = useRouter();
+  const { isAdmin, isLoading: isAdminLoading } = useAdminStore();
+
   const [step, setStep] = useState<Step>("idle");
   const [taskId, setTaskId] = useState<string | null>(null);
   const [articles, setArticles] = useState<PhishingArticle[]>([]);
@@ -22,20 +27,12 @@ export default function GeneratePage() {
   const [scenarioId, setScenarioId] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string>("");
 
-  // 크롤링 시작
-  const handleStartCrawling = async () => {
-    try {
-      setError(null);
-      setStep("crawling");
-      setStatusMessage("뉴스 크롤링 시작...");
-
-      const { task_id } = await startCrawling();
-      setTaskId(task_id);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "크롤링 시작 실패");
-      setStep("idle");
+  // 비관리자 접근 시 리다이렉트
+  useEffect(() => {
+    if (!isAdminLoading && !isAdmin) {
+      router.replace("/game");
     }
-  };
+  }, [isAdmin, isAdminLoading, router]);
 
   // 크롤링 상태 폴링
   useEffect(() => {
@@ -70,23 +67,6 @@ export default function GeneratePage() {
     return () => clearInterval(pollInterval);
   }, [step, taskId]);
 
-  // 시나리오 생성
-  const handleGenerate = async () => {
-    if (!selectedArticle) return;
-
-    try {
-      setError(null);
-      setStep("generating");
-      setStatusMessage("시나리오 생성 중...");
-
-      const { task_id } = await generateFromArticle(selectedArticle, difficulty);
-      setTaskId(task_id);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "시나리오 생성 실패");
-      setStep("selecting");
-    }
-  };
-
   // 시나리오 생성 상태 폴링
   useEffect(() => {
     if (step !== "generating" || !taskId) return;
@@ -116,6 +96,64 @@ export default function GeneratePage() {
     return () => clearInterval(pollInterval);
   }, [step, taskId]);
 
+  // 크롤링 시작
+  const handleStartCrawling = async () => {
+    try {
+      setError(null);
+      setStep("crawling");
+      setStatusMessage("뉴스 크롤링 시작...");
+
+      const { task_id } = await startCrawling();
+      setTaskId(task_id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "크롤링 시작 실패");
+      setStep("idle");
+    }
+  };
+
+  // 시나리오 생성
+  const handleGenerate = async () => {
+    if (!selectedArticle) return;
+
+    try {
+      setError(null);
+      setStep("generating");
+      setStatusMessage("시나리오 생성 중...");
+
+      const { task_id } = await generateFromArticle(selectedArticle, difficulty);
+      setTaskId(task_id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "시나리오 생성 실패");
+      setStep("selecting");
+    }
+  };
+
+  // 관리자 상태 확인 중
+  if (isAdminLoading) {
+    return (
+      <main className="min-h-screen p-6 flex items-center justify-center">
+        <div className="text-gray-400">권한 확인 중...</div>
+      </main>
+    );
+  }
+
+  // 비관리자 접근 차단 (리다이렉트 전 표시)
+  if (!isAdmin) {
+    return (
+      <main className="min-h-screen p-6 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-400 mb-4">관리자 권한이 필요합니다</p>
+          <Link
+            href="/game"
+            className="text-cyan-400 hover:text-cyan-300 underline"
+          >
+            시나리오 목록으로 이동
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen p-6">
       <div className="max-w-4xl mx-auto">
@@ -127,7 +165,7 @@ export default function GeneratePage() {
           >
             ← 시나리오 목록
           </Link>
-          <h1 className="text-3xl font-bold text-cyan-400">새 시나리오 만들기(관리자용)</h1>
+          <h1 className="text-3xl font-bold text-cyan-400">새 시나리오 만들기</h1>
           <p className="text-gray-400 mt-2">
             최신 피싱 뉴스를 기반으로 시나리오를 생성합니다
           </p>

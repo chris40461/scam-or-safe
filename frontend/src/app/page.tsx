@@ -1,6 +1,24 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
+import AdminLoginModal from "@/components/admin/AdminLoginModal";
+import { useAdminStore } from "@/lib/admin-store";
+import { adminLogout } from "@/lib/api";
 
 export default function LandingPage() {
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const { isAdmin, logout } = useAdminStore();
+
+  const handleLogout = async () => {
+    try {
+      await adminLogout();
+      logout();
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
+  };
+
   return (
     <main className="min-h-screen flex flex-col items-center justify-center p-6 relative crt-scanlines">
       <div className="max-w-4xl mx-auto text-center space-y-12">
@@ -58,6 +76,25 @@ export default function LandingPage() {
           >
             게임 시작하기
           </Link>
+
+          {/* 관리자 로그인/로그아웃 링크 */}
+          <div className="mt-4">
+            {isAdmin ? (
+              <button
+                onClick={handleLogout}
+                className="text-sm text-gray-500 hover:text-gray-300 underline underline-offset-2 transition-colors"
+              >
+                관리자 로그아웃
+              </button>
+            ) : (
+              <button
+                onClick={() => setIsLoginModalOpen(true)}
+                className="text-sm text-gray-500 hover:text-gray-300 underline underline-offset-2 transition-colors"
+              >
+                관리자로 로그인
+              </button>
+            )}
+          </div>
         </div>
 
         {/* 경고 문구 */}
@@ -67,6 +104,11 @@ export default function LandingPage() {
           실제 피싱 피해 발생 시 112 또는 금융감독원 1332로 신고하세요.
         </p>
       </div>
+
+      <AdminLoginModal
+        isOpen={isLoginModalOpen}
+        onClose={() => setIsLoginModalOpen(false)}
+      />
     </main>
   );
 }

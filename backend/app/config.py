@@ -19,8 +19,11 @@ class Settings(BaseSettings):
     naver_client_secret: str = ""
 
     # 서버 설정
-    backend_port: int = 8000
+    backend_port: int = 8080
     cors_origins: list[str] = ["http://localhost:3000"]
+
+    # 관리자 인증
+    admin_password: str = ""
 
     # 파이프라인 설정
     max_depth: int = 5
