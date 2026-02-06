@@ -18,11 +18,11 @@ lsof -ti :3000 | xargs kill -9 2>/dev/null
 sleep 1
 
 echo ""
-if lsof -i :8000 >/dev/null 2>&1; then
-    echo "[!] 경고: 포트 8000이 아직 사용 중"
-    echo "    수동 종료: kill -9 \$(lsof -ti :8000)"
+if lsof -i :8080 >/dev/null 2>&1; then
+    echo "[!] 경고: 포트 8080이 아직 사용 중"
+    echo "    수동 종료: kill -9 \$(lsof -ti :8080)"
 else
-    echo "[OK] 백엔드 종료 완료 (포트 8000)"
+    echo "[OK] 백엔드 종료 완료 (포트 8080)"
 fi
 
 if lsof -i :3000 >/dev/null 2>&1; then

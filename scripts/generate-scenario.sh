@@ -7,7 +7,7 @@
 PHISHING_TYPE="${1:-보이스피싱}"
 DIFFICULTY="${2:-medium}"
 SEED_INFO="${3:-}"
-BACKEND_URL="${BACKEND_URL:-http://localhost:8000}"
+BACKEND_URL="${BACKEND_URL:-http://localhost:8080}"
 
 echo "=== 시나리오 생성 ==="
 echo "피싱 유형: $PHISHING_TYPE"
