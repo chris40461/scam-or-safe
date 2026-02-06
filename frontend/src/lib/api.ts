@@ -1,6 +1,66 @@
 import type { ScenarioTree, ScenarioListItem } from "./types";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+// 클라이언트: 상대 경로 사용 (rewrites가 백엔드로 프록시)
+// 서버(API Route): BACKEND_URL 환경변수 사용
+const BACKEND_URL = typeof window === "undefined"
+  ? (process.env.BACKEND_URL || "http://localhost:8080")
+  : "";
+
+// ==================== 관리자 인증 API ====================
+
+export interface LoginResponse {
+  success: boolean;
+  message: string;
+}
+
+export interface VerifyResponse {
+  is_admin: boolean;
+}
+
+/** 관리자 로그인 */
+export async function adminLogin(password: string): Promise<LoginResponse> {
+  const res = await fetch(`${BACKEND_URL}/api/v1/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ password }),
+  });
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: "로그인 실패" }));
+    throw new Error(error.detail || "로그인 실패");
+  }
+
+  return res.json();
+}
+
+/** 관리자 로그아웃 */
+export async function adminLogout(): Promise<LoginResponse> {
+  const res = await fetch(`${BACKEND_URL}/api/v1/auth/logout`, {
+    method: "POST",
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    throw new Error("로그아웃 실패");
+  }
+
+  return res.json();
+}
+
+/** 관리자 세션 검증 */
+export async function verifyAdmin(): Promise<VerifyResponse> {
+  const res = await fetch(`${BACKEND_URL}/api/v1/auth/verify`, {
+    method: "GET",
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    return { is_admin: false };
+  }
+
+  return res.json();
+}
 
 /** 시나리오 목록 조회 */
 export async function fetchScenarios(): Promise<ScenarioListItem[]> {
