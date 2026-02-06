@@ -54,7 +54,7 @@ export function ChoicePanel({
               onClick={() => onChoose(choice.id)}
               disabled={disabled}
               className={`
-                relative w-full p-4 text-left rounded-lg border transition-all
+                relative w-full p-4 text-left rounded-lg border transition-all flex items-center gap-3
                 ${
                   disabled
                     ? "bg-gray-800 border-gray-700 text-gray-500 cursor-not-allowed"
@@ -62,10 +62,10 @@ export function ChoicePanel({
                 }
               `}
             >
-              <span className="inline-flex items-center justify-center w-6 h-6 mr-3 text-sm rounded bg-gray-700 text-gray-300">
+              <span className="flex items-center justify-center w-6 h-6 flex-shrink-0 text-sm rounded bg-gray-700 text-gray-300">
                 {index + 1}
               </span>
-              <span>{choice.text}</span>
+              <span className="flex-1">{choice.text}</span>
 
               {disabled && (
                 <span className="absolute right-4 top-1/2 -translate-y-1/2">

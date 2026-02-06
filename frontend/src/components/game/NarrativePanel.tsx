@@ -80,7 +80,7 @@ export function NarrativePanel({
 
       {/* 텍스트 영역 */}
       <div className="p-6 sm:p-8">
-        <p className="text-base sm:text-lg leading-loose whitespace-pre-wrap font-light text-gray-200">
+        <p className="text-base sm:text-lg leading-loose whitespace-pre-wrap font-bold text-gray-200">
           {displayedText}
           {!isComplete && (
             <span className="inline-block w-2 h-5 bg-cyan-400 ml-1 animate-pulse" />
