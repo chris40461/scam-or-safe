@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { motion } from "motion/react";
-import type { GameResult, ChoiceHistoryItem } from "@/lib/types";
+import type { GameResult, ChoiceHistoryItem, DangerFeedback } from "@/lib/types";
+import { DangerFeedbackModal } from "./DangerFeedbackModal";
 
 interface EndingScreenProps {
   result: GameResult;
@@ -17,6 +19,21 @@ export function EndingScreen({
   onGoBack,
 }: EndingScreenProps) {
   const isGood = result.ending === "good";
+
+  // 위험 선택 피드백 모달 상태
+  const [selectedFeedback, setSelectedFeedback] = useState<{
+    choiceText: string;
+    feedback: DangerFeedback;
+  } | null>(null);
+
+  const handleDangerChoiceClick = (item: ChoiceHistoryItem) => {
+    if (item.isDangerous && item.dangerFeedback) {
+      setSelectedFeedback({
+        choiceText: item.choiceText,
+        feedback: item.dangerFeedback,
+      });
+    }
+  };
 
   return (
     <motion.div
@@ -95,23 +112,40 @@ export function EndingScreen({
           선택 이력
         </h2>
         <div className="space-y-2 max-h-48 overflow-y-auto">
-          {result.choiceHistory.map((item: ChoiceHistoryItem, index: number) => (
-            <div
-              key={`${item.nodeId}-${item.choiceId}`}
-              className={`
-                flex items-center gap-2 text-sm p-2 rounded
-                ${item.isDangerous ? "bg-red-500/10 border-l-2 border-red-500" : "bg-gray-700/30"}
-              `}
-            >
-              <span className="text-gray-500 w-6">{index + 1}.</span>
-              <span className={item.isDangerous ? "text-red-300" : ""}>
-                {item.choiceText}
-              </span>
-              {item.isDangerous && (
-                <span className="ml-auto text-xs text-red-400">⚠️ 위험</span>
-              )}
-            </div>
-          ))}
+          {result.choiceHistory.map((item: ChoiceHistoryItem, index: number) => {
+            const hasFeedback = item.isDangerous && item.dangerFeedback;
+            return (
+              <div
+                key={`${item.nodeId}-${item.choiceId}`}
+                onClick={() => handleDangerChoiceClick(item)}
+                className={`
+                  flex items-center gap-2 text-sm p-2 rounded relative group
+                  ${item.isDangerous ? "bg-red-500/10 border-l-2 border-red-500" : "bg-gray-700/30"}
+                  ${hasFeedback ? "cursor-pointer hover:bg-red-500/20 transition-colors" : ""}
+                `}
+              >
+                <span className="text-gray-500 w-6">{index + 1}.</span>
+                <span className={item.isDangerous ? "text-red-300" : ""}>
+                  {item.choiceText}
+                </span>
+                {item.isDangerous && (
+                  <span className="ml-auto text-xs text-red-400 flex items-center gap-1">
+                    ⚠️ 위험
+                    {hasFeedback && (
+                      <span className="text-red-300">→</span>
+                    )}
+                  </span>
+                )}
+                {/* 툴팁 - 피드백이 있는 위험 선택에만 표시 */}
+                {hasFeedback && (
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 bg-gray-900 text-xs text-gray-200 rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 border border-red-500/30">
+                    클릭하여 왜 위험한지 알아보세요
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900" />
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -158,6 +192,16 @@ export function EndingScreen({
           <span className="text-xs sm:text-sm">다른 시나리오</span>
         </button>
       </div>
+
+      {/* 위험 선택 피드백 모달 */}
+      {selectedFeedback && (
+        <DangerFeedbackModal
+          choiceText={selectedFeedback.choiceText}
+          feedback={selectedFeedback.feedback}
+          isOpen={!!selectedFeedback}
+          onClose={() => setSelectedFeedback(null)}
+        />
+      )}
     </motion.div>
   );
 }

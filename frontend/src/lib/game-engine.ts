@@ -71,7 +71,7 @@ export function processChoice(
     ),
   };
 
-  // 선택 이력 추가
+  // 선택 이력 추가 (위험 선택인 경우 피드백 포함)
   const newHistory = [
     ...session.choiceHistory,
     {
@@ -79,6 +79,7 @@ export function processChoice(
       choiceId: choice.id,
       choiceText: choice.text,
       isDangerous: choice.is_dangerous,
+      dangerFeedback: choice.danger_feedback,
     },
   ];
 
