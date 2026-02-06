@@ -21,7 +21,7 @@ FRONTEND_PID=$!
 
 echo ""
 echo "=== 서버 시작 완료 ==="
-echo "백엔드:   http://localhost:8000"
+echo "백엔드:   http://localhost:8080"
 echo "프론트엔드: http://localhost:3000"
 echo ""
 echo "종료하려면 Ctrl+C 또는 ./scripts/stop-all.sh 실행"

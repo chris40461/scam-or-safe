@@ -50,7 +50,7 @@ cp .env.example .env
 # .env 파일에 API 키 입력
 
 # 서버 실행
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --port 8080
 ```
 
 ### 2. 프론트엔드
@@ -71,8 +71,8 @@ npm run dev
 ### 3. 접속
 
 - 프론트엔드: http://localhost:3000
-- 백엔드 API: http://localhost:8000
-- API 문서: http://localhost:8000/docs
+- 백엔드 API: http://localhost:8080
+- API 문서: http://localhost:8080/docs
 
 ## API 키 발급
 
@@ -99,7 +99,7 @@ npm run dev
 ### LLM 시나리오 생성
 ```bash
 # 새 시나리오 생성 요청
-curl -X POST http://localhost:8000/api/v1/scenarios/generate \
+curl -X POST http://localhost:8080/api/v1/scenarios/generate \
   -H "Content-Type: application/json" \
   -d '{"phishing_type": "로맨스스캠", "difficulty": "medium"}'
 ```
@@ -107,7 +107,7 @@ curl -X POST http://localhost:8000/api/v1/scenarios/generate \
 ### 뉴스 기반 시나리오 생성
 ```bash
 # 뉴스 크롤링 + 분석 + 시나리오 생성
-curl -X POST http://localhost:8000/api/v1/crawler/run \
+curl -X POST http://localhost:8080/api/v1/crawler/run \
   -H "Content-Type: application/json" \
   -d '{"generate_scenarios": true}'
 ```

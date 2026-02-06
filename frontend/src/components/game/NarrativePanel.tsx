@@ -33,7 +33,7 @@ export function NarrativePanel({
   onComplete,
   speed = 30,
 }: NarrativePanelProps) {
-  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+  // 이미지 URL은 /api/v1/images/... 형태로, rewrites가 백엔드로 프록시
   const formattedText = formatNarrativeText(text);
   const { displayedText, isComplete, skip } = useTypingEffect(formattedText, {
     speed,
@@ -70,7 +70,7 @@ export function NarrativePanel({
       {imageUrl && (
         <div className="relative w-full h-48 sm:h-64">
           <img
-            src={`${backendUrl}${imageUrl}`}
+            src={imageUrl}
             alt="장면 이미지"
             className="w-full h-full object-cover"
           />

@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.api.routes import scenario, crawler, images
+from app.api.routes import scenario, crawler, images, auth
 
 # 로깅 설정
 logging.basicConfig(
@@ -35,6 +35,7 @@ app.add_middleware(
 app.include_router(scenario.router, prefix="/api/v1")
 app.include_router(crawler.router, prefix="/api/v1")
 app.include_router(images.router, prefix="/api/v1")
+app.include_router(auth.router, prefix="/api/v1")
 
 
 @app.get("/health")

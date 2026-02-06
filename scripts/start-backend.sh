@@ -22,5 +22,5 @@ if [ ! -f ".env" ]; then
     echo "경고: .env 파일이 없습니다. .env.example을 참고하여 생성하세요."
 fi
 
-echo "백엔드 서버 시작 (포트: 8000)..."
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+echo "백엔드 서버 시작 (포트: 8080)..."
+uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
