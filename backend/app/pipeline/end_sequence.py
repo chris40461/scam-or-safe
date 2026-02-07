@@ -14,7 +14,7 @@ class EndSignal:
     ending_type: str | None  # "good" | "bad" | None
     reason: str
     force: bool  # True면 LLM 판단 무시
-
+ 
 
 def infer_ending(path_choices: list[Choice]) -> str:
     """선택 패턴 기반 엔딩 추론 (마지막 선택 우선)"""
@@ -27,7 +27,7 @@ def infer_ending(path_choices: list[Choice]) -> str:
     return "bad"
 
 
-MIN_DEPTH_FOR_ENDING = 3  # 최소 3단계 진행 후에만 엔딩 가능
+MIN_DEPTH_FOR_ENDING = 5  # 최소 k단계 진행 후에만 엔딩 가능
 
 
 def compute_end_signal(
