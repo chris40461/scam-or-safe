@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import type { Choice } from "@/lib/types";
 
@@ -17,17 +17,27 @@ export function ChoicePanel({
   disabled,
   isVisible,
 }: ChoicePanelProps) {
+  // 선택지 순서 랜덤 셔플 (choices 배열이 바뀔 때만 재셔플)
+  const shuffledChoices = useMemo(() => {
+    const arr = [...choices];
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }, [choices]);
+
   // 숫자키 단축키
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (disabled || !isVisible) return;
 
       const num = parseInt(e.key);
-      if (num >= 1 && num <= choices.length) {
-        onChoose(choices[num - 1].id);
+      if (num >= 1 && num <= shuffledChoices.length) {
+        onChoose(shuffledChoices[num - 1].id);
       }
     },
-    [choices, disabled, isVisible, onChoose]
+    [shuffledChoices, disabled, isVisible, onChoose]
   );
 
   useEffect(() => {
@@ -45,7 +55,7 @@ export function ChoicePanel({
           transition={{ duration: 0.3 }}
           className="flex flex-col gap-3"
         >
-          {choices.map((choice, index) => (
+          {shuffledChoices.map((choice, index) => (
             <motion.button
               key={choice.id}
               initial={{ opacity: 0, x: -20 }}
