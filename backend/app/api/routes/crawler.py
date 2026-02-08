@@ -1,6 +1,9 @@
 """뉴스 크롤링 API 라우트 (RSS 기반)"""
 import asyncio
+import json
 import logging
+from datetime import datetime, timezone, timedelta
+from pathlib import Path
 from uuid import uuid4
 from pydantic import BaseModel, Field, field_validator
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, Request
@@ -18,11 +21,80 @@ from app.api.deps import require_admin, limiter, acquire_task_slot, release_task
 logger = logging.getLogger("api.crawler")
 router = APIRouter(prefix="/crawler", tags=["crawler"])
 
+# 뉴스 캐시 디렉토리
+NEWS_CACHE_DIR = Path(__file__).parent.parent.parent / "data" / "news_cache"
+NEWS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
 # 크롤링 작업 상태 저장
 crawler_tasks: dict[str, dict] = {}
 
 # 분석된 기사 캐시 (id -> PhishingArticle)
 analyzed_articles: dict[str, PhishingArticle] = {}
+
+
+def _save_articles_to_file(articles: list[PhishingArticle]) -> str:
+    """분석된 기사들을 JSON 파일로 저장
+    
+    Returns:
+        저장된 파일 경로
+    """
+    kst = timezone(timedelta(hours=9))
+    now = datetime.now(kst)
+    
+    data = {
+        "crawled_at": now.isoformat(),
+        "total_count": len(articles),
+        "articles": [a.model_dump() for a in articles]
+    }
+    
+    # 날짜별 파일 저장
+    date_str = now.strftime("%Y-%m-%d")
+    date_file = NEWS_CACHE_DIR / f"articles_{date_str}.json"
+    
+    with open(date_file, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2, default=str)
+    
+    # 최신 파일도 저장 (덮어쓰기)
+    latest_file = NEWS_CACHE_DIR / "articles_latest.json"
+    with open(latest_file, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2, default=str)
+    
+    logger.info("기사 저장 완료: %s (%d개)", date_file.name, len(articles))
+    return str(date_file)
+
+
+def _load_articles_from_file() -> dict[str, PhishingArticle]:
+    """최신 캐시 파일에서 기사 로드
+    
+    Returns:
+        id -> PhishingArticle 딕셔너리
+    """
+    latest_file = NEWS_CACHE_DIR / "articles_latest.json"
+    
+    if not latest_file.exists():
+        logger.info("캐시 파일 없음, 빈 상태로 시작")
+        return {}
+    
+    try:
+        with open(latest_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        
+        articles = {}
+        for item in data.get("articles", []):
+            article = PhishingArticle(**item)
+            articles[article.id] = article
+        
+        logger.info("캐시 로드 완료: %d개 기사 (from %s)", 
+                   len(articles), data.get("crawled_at", "unknown"))
+        return articles
+    
+    except Exception as e:
+        logger.warning("캐시 로드 실패: %s", str(e))
+        return {}
+
+
+# 서버 시작 시 캐시 로드
+analyzed_articles = _load_articles_from_file()
 
 
 class RefreshRequest(BaseModel):
@@ -95,6 +167,9 @@ async def _run_refresh(task_id: str, keywords: list[str] | None):
 
         # dict로 저장 (id -> article)
         analyzed_articles = {a.id: a for a in articles}
+        
+        # JSON 파일로 저장
+        _save_articles_to_file(articles)
 
         crawler_tasks[task_id]["articles_count"] = len(articles)
         crawler_tasks[task_id]["status"] = "completed"
@@ -342,7 +417,10 @@ async def _run_generate_scenarios(task_id: str, request: GenerateScenariosReques
         logger.info("[%s] 크롤링 시작: keywords=%s", task_id, request.keywords)
 
         articles = await crawl_and_analyze(request.keywords)
-        analyzed_articles = articles
+        analyzed_articles = {a.id: a for a in articles}
+        
+        # JSON 파일로 저장
+        _save_articles_to_file(articles)
 
         crawler_tasks[task_id]["articles_count"] = len(articles)
         logger.info("[%s] 분석 완료: %d개 기사", task_id, len(articles))
