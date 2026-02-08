@@ -10,7 +10,6 @@ WORKDIR /app
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 COPY app/ ./app/
-COPY credentials/ ./credentials/
 
 # Cloud Run은 PORT 환경변수를 자동 설정 (기본 8080)
 ENV PORT=8080

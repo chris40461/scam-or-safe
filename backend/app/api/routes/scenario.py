@@ -4,11 +4,12 @@ import asyncio
 import logging
 from pathlib import Path
 from uuid import uuid4
-from pydantic import BaseModel
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from pydantic import BaseModel, Field
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, Request
 
 from app.models.scenario import ScenarioTree
 from app.pipeline.tree_builder import ScenarioTreeBuilder
+from app.api.deps import require_admin, limiter, acquire_task_slot, release_task_slot, cleanup_task_dict, sanitize_error
 
 logger = logging.getLogger("api.scenario")
 
@@ -23,9 +24,9 @@ generation_tasks: dict[str, dict] = {}
 
 class GenerateRequest(BaseModel):
     """시나리오 생성 요청"""
-    phishing_type: str
-    difficulty: str = "medium"
-    seed_info: str | None = None
+    phishing_type: str = Field(min_length=1, max_length=50)
+    difficulty: str = Field(default="medium", pattern=r"^(easy|medium|hard)$")
+    seed_info: str | None = Field(default=None, max_length=2000)
 
 
 def _load_scenario(file_path: Path) -> ScenarioTree:
@@ -67,7 +68,8 @@ def _get_all_scenarios() -> list[ScenarioTree]:
 
 
 @router.get("")
-async def list_scenarios() -> list[dict]:
+@limiter.limit("60/minute")
+async def list_scenarios(request: Request) -> list[dict]:
     """시나리오 목록 조회"""
     scenarios = _get_all_scenarios()
     return [
@@ -84,7 +86,8 @@ async def list_scenarios() -> list[dict]:
 
 
 @router.get("/{scenario_id}")
-async def get_scenario(scenario_id: str) -> ScenarioTree:
+@limiter.limit("60/minute")
+async def get_scenario(request: Request, scenario_id: str) -> ScenarioTree:
     """시나리오 상세 조회"""
     scenarios = _get_all_scenarios()
     for scenario in scenarios:
@@ -114,31 +117,40 @@ async def _run_generation(task_id: str, request: GenerateRequest):
 
     except Exception as e:
         generation_tasks[task_id]["status"] = "failed"
-        generation_tasks[task_id]["error"] = str(e)
+        generation_tasks[task_id]["error"] = sanitize_error(e)
         logger.error("생성 실패: task=%s, error=%s", task_id, str(e))
+    finally:
+        release_task_slot(task_id)
+        cleanup_task_dict(generation_tasks)
 
 
-@router.post("/generate")
+@router.post("/generate", dependencies=[Depends(require_admin)])
+@limiter.limit("3/minute")
 async def generate_scenario(
-    request: GenerateRequest,
+    request: Request,
+    body: GenerateRequest,
     background_tasks: BackgroundTasks
 ) -> dict:
     """시나리오 자동 생성 (비동기)"""
     task_id = f"task_{uuid4().hex[:8]}"
 
+    if not acquire_task_slot(task_id):
+        raise HTTPException(status_code=429, detail="동시 작업 수 제한 초과. 기존 작업이 완료된 후 다시 시도하세요.")
+
     generation_tasks[task_id] = {
         "status": "pending",
-        "phishing_type": request.phishing_type,
-        "difficulty": request.difficulty,
+        "phishing_type": body.phishing_type,
+        "difficulty": body.difficulty,
     }
 
-    background_tasks.add_task(_run_generation, task_id, request)
+    background_tasks.add_task(_run_generation, task_id, body)
 
     return {"task_id": task_id, "status": "started"}
 
 
 @router.get("/{scenario_id}/status")
-async def get_generation_status(scenario_id: str) -> dict:
+@limiter.limit("60/minute")
+async def get_generation_status(request: Request, scenario_id: str) -> dict:
     """생성 작업 상태 조회 (task_id로 조회)"""
     if scenario_id not in generation_tasks:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -147,8 +159,10 @@ async def get_generation_status(scenario_id: str) -> dict:
     return task
 
 
-@router.post("/{scenario_id}/regenerate-images")
+@router.post("/{scenario_id}/regenerate-images", dependencies=[Depends(require_admin)])
+@limiter.limit("3/minute")
 async def regenerate_failed_images(
+    request: Request,
     scenario_id: str,
     background_tasks: BackgroundTasks
 ) -> dict:
@@ -177,8 +191,11 @@ async def regenerate_failed_images(
             "total_nodes": len(scenario.nodes),
             "failed_count": 0
         }
-    
+
     task_id = f"regen_{uuid4().hex[:8]}"
+
+    if not acquire_task_slot(task_id):
+        raise HTTPException(status_code=429, detail="동시 작업 수 제한 초과. 기존 작업이 완료된 후 다시 시도하세요.")
     generation_tasks[task_id] = {
         "status": "pending",
         "scenario_id": scenario_id,
@@ -256,7 +273,8 @@ async def _run_image_regeneration(task_id: str, scenario_id: str):
         
     except Exception as e:
         generation_tasks[task_id]["status"] = "failed"
-        generation_tasks[task_id]["error"] = str(e)
+        generation_tasks[task_id]["error"] = sanitize_error(e)
         logger.error(f"이미지 재생성 실패: {e}")
-
-
+    finally:
+        release_task_slot(task_id)
+        cleanup_task_dict(generation_tasks)

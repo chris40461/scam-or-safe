@@ -3,10 +3,11 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Response, Cookie
+from fastapi import APIRouter, HTTPException, Response, Cookie, Request
 from pydantic import BaseModel
 
 from app.config import settings
+from app.api.deps import limiter
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -40,7 +41,8 @@ def cleanup_expired_tokens():
 
 
 @router.post("/login")
-async def admin_login(request: LoginRequest, response: Response) -> LoginResponse:
+@limiter.limit("3/minute")
+async def admin_login(request: Request, body: LoginRequest, response: Response) -> LoginResponse:
     """관리자 로그인
 
     비밀번호 검증 후 HTTP-only 쿠키 발급
@@ -53,7 +55,7 @@ async def admin_login(request: LoginRequest, response: Response) -> LoginRespons
         )
 
     # 비밀번호 검증 (타이밍 공격 방지)
-    if not secrets.compare_digest(request.password, settings.admin_password):
+    if not secrets.compare_digest(body.password, settings.admin_password):
         raise HTTPException(
             status_code=401,
             detail="비밀번호가 올바르지 않습니다"
@@ -72,7 +74,7 @@ async def admin_login(request: LoginRequest, response: Response) -> LoginRespons
         key="admin_token",
         value=token,
         httponly=True,
-        secure=False,  # 개발 환경에서는 False, 프로덕션에서는 True
+        secure=settings.is_production,
         samesite="lax",
         max_age=TOKEN_EXPIRY_HOURS * 3600,
     )

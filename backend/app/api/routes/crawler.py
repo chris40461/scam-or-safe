@@ -2,8 +2,8 @@
 import asyncio
 import logging
 from uuid import uuid4
-from pydantic import BaseModel, Field
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from pydantic import BaseModel, Field, field_validator
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, Request
 
 from app.core.news_crawler import (
     crawl_and_analyze,
@@ -13,6 +13,7 @@ from app.core.news_crawler import (
 from app.models.news import PhishingArticle
 from app.pipeline.tree_builder import ScenarioTreeBuilder
 from app.api.routes.scenario import _save_scenario
+from app.api.deps import require_admin, limiter, acquire_task_slot, release_task_slot, cleanup_task_dict, sanitize_error
 
 logger = logging.getLogger("api.crawler")
 router = APIRouter(prefix="/crawler", tags=["crawler"])
@@ -26,14 +27,24 @@ analyzed_articles: dict[str, PhishingArticle] = {}
 
 class RefreshRequest(BaseModel):
     """크롤링 새로고침 요청"""
-    keywords: list[str] | None = None
+    keywords: list[str] | None = Field(default=None, max_length=10)
+
+    @field_validator("keywords")
+    @classmethod
+    def validate_keywords(cls, v):
+        if v:
+            for kw in v:
+                if len(kw) > 100:
+                    raise ValueError("키워드는 100자 이하여야 합니다")
+        return v
 
 
 class GenerateFromArticleRequest(BaseModel):
     """선택한 기사 기반 시나리오 생성 요청"""
-    article_id: str = Field(description="선택한 기사 ID")
+    article_id: str = Field(description="선택한 기사 ID", max_length=100)
     difficulty: str = Field(
         default="medium",
+        pattern=r"^(easy|medium|hard)$",
         description="시나리오 난이도 (easy/medium/hard)"
     )
 
@@ -42,20 +53,32 @@ class GenerateScenariosRequest(BaseModel):
     """크롤링 기반 시나리오 자동 생성 요청"""
     keywords: list[str] | None = Field(
         default=None,
+        max_length=10,
         description="검색 키워드 (없으면 기본 키워드 사용)"
     )
     phishing_type: str | None = Field(
         default=None,
+        max_length=50,
         description="특정 피싱 유형으로 필터링 (없으면 모든 유형)"
     )
     difficulty: str = Field(
         default="medium",
+        pattern=r"^(easy|medium|hard)$",
         description="시나리오 난이도 (easy/medium/hard)"
     )
+
+    @field_validator("keywords")
+    @classmethod
+    def validate_keywords(cls, v):
+        if v:
+            for kw in v:
+                if len(kw) > 100:
+                    raise ValueError("키워드는 100자 이하여야 합니다")
+        return v
     max_scenarios: int = Field(
-        default=3,
+        default=1,
         ge=1,
-        le=10,
+        le=3,
         description="생성할 최대 시나리오 수"
     )
 
@@ -86,13 +109,18 @@ async def _run_refresh(task_id: str, keywords: list[str] | None):
 
     except Exception as e:
         crawler_tasks[task_id]["status"] = "failed"
-        crawler_tasks[task_id]["error"] = str(e)
+        crawler_tasks[task_id]["error"] = sanitize_error(e)
         logger.error("[%s] 크롤링 실패: %s", task_id, str(e))
+    finally:
+        release_task_slot(task_id)
+        cleanup_task_dict(crawler_tasks)
 
 
-@router.post("/refresh")
+@router.post("/refresh", dependencies=[Depends(require_admin)])
+@limiter.limit("3/minute")
 async def refresh_articles(
-    request: RefreshRequest,
+    request: Request,
+    body: RefreshRequest,
     background_tasks: BackgroundTasks
 ) -> dict:
     """뉴스 크롤링 새로고침 (RSS 기반)
@@ -102,12 +130,15 @@ async def refresh_articles(
     """
     task_id = f"crawl_{uuid4().hex[:8]}"
 
+    if not acquire_task_slot(task_id):
+        raise HTTPException(status_code=429, detail="동시 작업 수 제한 초과. 기존 작업이 완료된 후 다시 시도하세요.")
+
     crawler_tasks[task_id] = {
         "status": "pending",
-        "keywords": request.keywords,
+        "keywords": body.keywords,
     }
 
-    background_tasks.add_task(_run_refresh, task_id, request.keywords)
+    background_tasks.add_task(_run_refresh, task_id, body.keywords)
 
     logger.info("[%s] 크롤링 새로고침 시작", task_id)
 
@@ -119,7 +150,8 @@ async def refresh_articles(
 
 
 @router.get("/status/{task_id}")
-async def get_crawl_status(task_id: str) -> dict:
+@limiter.limit("60/minute")
+async def get_crawl_status(request: Request, task_id: str) -> dict:
     """크롤링 작업 상태 조회"""
     if task_id not in crawler_tasks:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -128,7 +160,9 @@ async def get_crawl_status(task_id: str) -> dict:
 
 
 @router.get("/articles")
+@limiter.limit("60/minute")
 async def get_articles(
+    request: Request,
     phishing_type: str | None = None,
     limit: int = 20
 ) -> dict:
@@ -147,7 +181,8 @@ async def get_articles(
 
 
 @router.get("/articles/{article_id}")
-async def get_article(article_id: str) -> dict:
+@limiter.limit("60/minute")
+async def get_article(request: Request, article_id: str) -> dict:
     """개별 기사 상세 조회"""
     if article_id not in analyzed_articles:
         raise HTTPException(status_code=404, detail="Article not found")
@@ -155,30 +190,35 @@ async def get_article(article_id: str) -> dict:
     return analyzed_articles[article_id].model_dump()
 
 
-@router.post("/generate-from-article")
+@router.post("/generate-from-article", dependencies=[Depends(require_admin)])
+@limiter.limit("3/minute")
 async def generate_from_article(
-    request: GenerateFromArticleRequest,
+    request: Request,
+    body: GenerateFromArticleRequest,
     background_tasks: BackgroundTasks
 ) -> dict:
     """선택한 기사 기반 시나리오 생성
 
     Frontend에서 사용자가 기사를 선택하면, 해당 기사의 정보를 활용하여 시나리오 생성
     """
-    if request.article_id not in analyzed_articles:
+    if body.article_id not in analyzed_articles:
         raise HTTPException(status_code=404, detail="Article not found")
 
-    article = analyzed_articles[request.article_id]
+    article = analyzed_articles[body.article_id]
     task_id = f"gen_{uuid4().hex[:8]}"
+
+    if not acquire_task_slot(task_id):
+        raise HTTPException(status_code=429, detail="동시 작업 수 제한 초과. 기존 작업이 완료된 후 다시 시도하세요.")
 
     crawler_tasks[task_id] = {
         "status": "pending",
-        "article_id": request.article_id,
+        "article_id": body.article_id,
         "article_title": article.title,
-        "difficulty": request.difficulty,
+        "difficulty": body.difficulty,
     }
 
     background_tasks.add_task(
-        _run_generate_from_article, task_id, article, request.difficulty
+        _run_generate_from_article, task_id, article, body.difficulty
     )
 
     logger.info("[%s] 기사 기반 시나리오 생성 시작: %s", task_id, article.title)
@@ -217,8 +257,11 @@ async def _run_generate_from_article(
 
     except Exception as e:
         crawler_tasks[task_id]["status"] = "failed"
-        crawler_tasks[task_id]["error"] = str(e)
+        crawler_tasks[task_id]["error"] = sanitize_error(e)
         logger.error("[%s] 시나리오 생성 실패: %s", task_id, str(e))
+    finally:
+        release_task_slot(task_id)
+        cleanup_task_dict(crawler_tasks)
 
 
 def format_article_as_seed(article: PhishingArticle) -> str:
@@ -359,13 +402,18 @@ async def _run_generate_scenarios(task_id: str, request: GenerateScenariosReques
 
     except Exception as e:
         crawler_tasks[task_id]["status"] = "failed"
-        crawler_tasks[task_id]["error"] = str(e)
+        crawler_tasks[task_id]["error"] = sanitize_error(e)
         logger.error("[%s] 실패: %s", task_id, str(e))
+    finally:
+        release_task_slot(task_id)
+        cleanup_task_dict(crawler_tasks)
 
 
-@router.post("/generate-scenarios")
+@router.post("/generate-scenarios", dependencies=[Depends(require_admin)])
+@limiter.limit("3/minute")
 async def generate_scenarios_from_news(
-    request: GenerateScenariosRequest,
+    request: Request,
+    body: GenerateScenariosRequest,
     background_tasks: BackgroundTasks
 ) -> dict:
     """뉴스 크롤링 기반 시나리오 자동 생성
@@ -377,15 +425,18 @@ async def generate_scenarios_from_news(
     """
     task_id = f"crawl_gen_{uuid4().hex[:8]}"
 
+    if not acquire_task_slot(task_id):
+        raise HTTPException(status_code=429, detail="동시 작업 수 제한 초과. 기존 작업이 완료된 후 다시 시도하세요.")
+
     crawler_tasks[task_id] = {
         "status": "pending",
-        "keywords": request.keywords,
-        "phishing_type": request.phishing_type,
-        "difficulty": request.difficulty,
-        "max_scenarios": request.max_scenarios,
+        "keywords": body.keywords,
+        "phishing_type": body.phishing_type,
+        "difficulty": body.difficulty,
+        "max_scenarios": body.max_scenarios,
     }
 
-    background_tasks.add_task(_run_generate_scenarios, task_id, request)
+    background_tasks.add_task(_run_generate_scenarios, task_id, body)
 
     logger.info("[%s] 시나리오 생성 요청 시작", task_id)
 
