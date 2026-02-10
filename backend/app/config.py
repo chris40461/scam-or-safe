@@ -14,10 +14,6 @@ class Settings(BaseSettings):
     gcp_project_id: str = ""
     gcp_location: str = "us-central1"
 
-    # 네이버 검색 Open API
-    naver_client_id: str = ""
-    naver_client_secret: str = ""
-
     # 서버 설정
     backend_port: int = 8080
     cors_origins: list[str] = ["http://localhost:3000"]
