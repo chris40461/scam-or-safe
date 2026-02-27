@@ -21,34 +21,7 @@
 
 ## 🔄 서비스 파이프라인
 
-```mermaid
-flowchart TB
-    subgraph CRAWL["📰 뉴스 수집"]
-        C1["Google News RSS 크롤링"]
-        C2["피싱 키워드 필터링 및 분석"]
-    end
-
-    subgraph BUILD["🤖 시나리오 생성"]
-        B1["뉴스 기반 뼈대 구축"]
-        B2["Gemini LLM - BFS 트리 생성"]
-        B3["Imagen - 장면별 삽화 생성"]
-    end
-
-    subgraph PLAY["🎮 게임 플레이"]
-        P1["시나리오 선택 및 플레이"]
-        P2["선택지 분기 및 리소스 변화"]
-        P3["GOOD / BAD 엔딩"]
-    end
-
-    subgraph FEEDBACK["🎓 피드백"]
-        F1["선택 경로 역추적"]
-        F2["위험 신호 분석 리포트"]
-    end
-
-    C1 --> C2 --> B1 --> B2 --> B3
-    B3 --> P1 --> P2 --> P3
-    P3 --> F1 --> F2
-```
+![서비스 파이프라인](assets/flowchart.png)
 
 ---
 
